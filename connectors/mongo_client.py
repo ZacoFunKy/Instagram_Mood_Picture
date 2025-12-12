@@ -10,8 +10,10 @@ def connect_db():
     if not uri:
         raise ValueError("MONGODB_URI environment variable not set")
     
-    # [FIX] Force bypass SSL verification to resolve persistent TLSV1_ALERT_INTERNAL_ERROR on Windows
-    client = MongoClient(uri, tls=True, tlsAllowInvalidCertificates=True)
+    # [FIX] Standard robust connection for Atlas
+    # 'tlsCAFile' ensures we use valid CA certificates (fixes Windows issues).
+    # We do NOT use 'tlsAllowInvalidCertificates' in production as it is insecure.
+    client = MongoClient(uri, tlsCAFile=certifi.where())
     return client
 
 def get_database():

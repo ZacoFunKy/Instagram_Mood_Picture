@@ -17,6 +17,7 @@ from connectors import mongo_client, yt_music, calendar_client, insta_web_client
 def main():
     parser = argparse.ArgumentParser(description="Predictive Profile AI")
     parser.add_argument("--dry-run", action="store_true", help="Run without calling Gemini or updating Instagram")
+    parser.add_argument("--no-delay", action="store_true", help="Skip the random start delay")
     args = parser.parse_args()
     
     if args.dry_run:
@@ -26,13 +27,18 @@ def main():
     
     # [OPT] Randomize execution time (+/- 15 mins delay)
     # Cron runs at 3:00. We delay between 0 and 900 seconds (15 mins).
-    if not args.dry_run:
+    if not args.dry_run and not args.no_delay:
         delay = random.randint(0, 900)
         print(f"Adding random delay of {delay} seconds to avoid detection...")
         time.sleep(delay)
+    elif args.no_delay:
+        print("Skipping random delay (--no-delay).")
     
     # 1. Connect DB & Fetch History
     historical_moods = []
+    logs_col = None
+    weekday = datetime.datetime.now().strftime("%A")
+    
     try:
         db = mongo_client.get_database()
         logs_col = db['daily_logs']
@@ -46,14 +52,15 @@ def main():
         
         # Fetch history (pass collection!)
         # arguments: collection, weekday
-        weekday = datetime.datetime.now().strftime("%A")
         history_docs = mongo_client.get_historical_moods(logs_col, weekday)
         historical_moods = [doc.get('mood_selected') for doc in history_docs]
         
         print("Connected to MongoDB.")
     except Exception as e:
         print(f"Error connecting to MongoDB/Fetching History: {e}")
-        return
+        print("⚠️ CONTINGENCY MODE: Continuing without Database history.")
+        # Proceed with empty history, do not return
+
 
     # 2. Data Fetching
     print(f"Date: {datetime.datetime.now().strftime('%Y-%m-%d')}, Weekday: {weekday}")
@@ -122,9 +129,12 @@ def main():
     }
     
     try:
-        # function is save_log(collection, data)
-        mongo_client.save_log(logs_col, log_entry)
-        print("Daily log saved to MongoDB.")
+        if logs_col is not None:
+            # function is save_log(collection, data)
+            mongo_client.save_log(logs_col, log_entry)
+            print("Daily log saved to MongoDB.")
+        else:
+            print("Skipping MongoDB save (Not connected).")
     except Exception as e:
         print(f"Error saving log: {e}")
 
