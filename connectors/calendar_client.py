@@ -95,9 +95,29 @@ def create_report_event(summary, description):
         today = datetime.datetime.now()
         date_str = today.strftime('%Y-%m-%d')
         
+        # Check for existing duplicate alert
+        today_start_rfc = f"{date_str}T00:00:00Z"
+        today_end_rfc = f"{date_str}T23:59:59Z"
+        
+        existing_events = service.events().list(
+            calendarId=calendar_id,
+            timeMin=today_start_rfc,
+            timeMax=today_end_rfc,
+            singleEvents=True
+        ).execute().get('items', [])
+        
+        full_summary = f"🚨 ALERT: {summary}"
+        
+        print(f"DEBUG: Checking duplicates for '{full_summary}' among {len(existing_events)} exists.")
+        for ev in existing_events:
+            # print(f"DEBUG: Found event: {ev.get('summary')}")
+            if ev.get('summary') == full_summary:
+                print(f"Skipping Duplicate Alert: {summary}")
+                return
+
         # Create event for Today 18h-19h (or next slot)
         event = {
-            'summary': f"🚨 ALERT: {summary}",
+            'summary': full_summary,
             'description': description,
             'start': {
                 'dateTime': f"{date_str}T18:00:00",

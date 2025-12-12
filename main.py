@@ -68,19 +68,47 @@ def fetch_db_history(weekday: str, dry_run: bool) -> List[str]:
         logger.warning("⚠️ CONTINGENCY MODE: Proceeding without DB history.")
         return []
 
-def get_music_summary() -> str:
-    """Fetches music listening history."""
+def get_music_summary_for_window(run_hour: int = 3) -> str:
+    """Fetches yesterday's music (+ today if before run_hour).
+
+    - Uses ytmusicapi browser auth history.
+    - Filters items based on 'played' text: Yesterday/Hier, Aujourd'hui/Today, 'il y a' hours/minutes.
+    """
     try:
-        summary = yt_music.get_yesterday_music()
-        if isinstance(summary, list):
-            summary_str = ", ".join(summary)
-        else:
-            summary_str = str(summary)
-        logger.info("Music history fetched successfully.")
-        return summary_str
+        items = yt_music.get_full_history(limit=500)
+        now = datetime.datetime.now()
+        include_today = now.hour < run_hour
+        filtered = []
+
+        def is_today_played(text: str) -> bool:
+            t = (text or "").lower()
+            return any(s in t for s in ["today", "aujourd", "il y a", "minutes", "heures"]) and not any(s in t for s in ["yesterday", "hier"])
+
+        def is_yesterday_played(text: str) -> bool:
+            t = (text or "").lower()
+            return any(s in t for s in ["yesterday", "hier"])
+
+        for it in items:
+            played = it.get("played", "")
+            if is_yesterday_played(played) or (include_today and is_today_played(played)):
+                artists = ", ".join(it.get("artists", [])).strip()
+                title = it.get("title", "")
+                if artists and title:
+                    filtered.append(f"{artists} - {title}")
+
+        if not filtered:
+            # Fallback: take last ~30 items if heuristics fail
+            for it in items[:30]:
+                artists = ", ".join(it.get("artists", [])).strip()
+                title = it.get("title", "")
+                if artists and title:
+                    filtered.append(f"{artists} - {title}")
+
+        summary_str = ", ".join(filtered[:80])
+        logger.info(f"Music window fetched. Count={len(filtered)} include_today={include_today}")
+        return summary_str if summary_str else "No music in window"
     except Exception as e:
         logger.error(f"Music Fetch failed: {e}")
-        # Trigger Alert
         return "No music data available (Error fetching)."
 
 def get_calendar_summary() -> str:
@@ -152,18 +180,14 @@ def main():
     
     # Music
     try:
-        music_summary_str = get_music_summary()
-    except Exception as music_err: # Should be caught inside, but double check
+        music_summary_str = get_music_summary_for_window(run_hour=3)
+    except Exception as music_err: 
          music_summary_str = "Error"
+    
+    # Check for failure string (returned by get_music_summary on handled error)
     if "Error" in music_summary_str and not args.dry_run:
-         # We can trigger specific logic here if checking string, 
-         # but better done in get_music_summary except block.
-         # For strict adherence to previous logic, we alert here if exception bubbled up
-         # But in my refactor `get_music_summary` catches it.
-         # Let's add the alert trigger logic explicitly if needed, 
-         # but cleaner to do it in the function.
-         # I'll update `get_music_summary` to call alert_failure.
-         pass # Handled in helpers
+         logger.error("Triggering Alert for Music Failure...")
+         alert_failure("YouTube Music", Exception(music_summary_str), args.dry_run)
 
     # Calendar
     calendar_summary_str = get_calendar_summary()

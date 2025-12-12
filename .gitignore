@@ -1,11 +1,16 @@
 # Secrets
 .env
-# Secrets
-.env
 headers_auth.json
 creds.json
 tokens.json
 oauth_final.json
+oauth.json
+oauth_credentials.json
+oauth.json.backup
+browser_auth.json
+final_creds.json
+final_tokens.json
+oauth_tv.json
 
 # Dependencies
 venv/
