@@ -11,6 +11,11 @@ on:
         required: false
         type: boolean
         default: false
+      no_delay:
+        description: 'Skip random delay (Immediate run)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   predict-and-update:
@@ -42,8 +47,7 @@ jobs:
         TARGET_CALENDAR_ID: ${{ secrets.TARGET_CALENDAR_ID }}
         IG_SESSIONID: ${{ secrets.IG_SESSIONID }}
       run: |
-        if [ "${{ github.event.inputs.no_ai }}" == "true" ]; then
-          python main.py --no-ai
-        else
-          python main.py
-        fi
+        ARGS=""
+        if [ "${{ github.event.inputs.no_ai }}" == "true" ]; then ARGS="$ARGS --no-ai"; fi
+        if [ "${{ github.event.inputs.no_delay }}" == "true" ]; then ARGS="$ARGS --no-delay"; fi
+        python main.py $ARGS

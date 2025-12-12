@@ -67,6 +67,57 @@ def fetch_ics_events(start_dt, end_dt):
             
     return events_found
 
+
+def create_report_event(summary, description):
+    """
+    Creates an urgent event in the calendar to alert the user of a system error.
+    Used by main.py when something critical fails.
+    """
+    service_account_info_str = os.environ.get("GOOGLE_SERVICE_ACCOUNT")
+    calendar_id = os.environ.get("TARGET_CALENDAR_ID")
+    
+    if not service_account_info_str or not calendar_id:
+        print("Cannot create report event: Missing credentials/ID.")
+        return
+
+    try:
+        service_account_info = json.loads(service_account_info_str)
+        # [CRITICAL] Need write access here
+        creds = service_account.Credentials.from_service_account_info(
+            service_account_info, scopes=['https://www.googleapis.com/auth/calendar'])
+        service = build('calendar', 'v3', credentials=creds)
+        
+        today = datetime.datetime.now()
+        date_str = today.strftime('%Y-%m-%d')
+        
+        # Create event for Today 18h-19h (or next slot)
+        event = {
+            'summary': f"🚨 ALERT: {summary}",
+            'description': description,
+            'start': {
+                'dateTime': f"{date_str}T18:00:00",
+                'timeZone': 'Europe/Paris',
+            },
+            'end': {
+                'dateTime': f"{date_str}T19:00:00",
+                'timeZone': 'Europe/Paris',
+            },
+            'reminders': {
+                'useDefault': False,
+                'overrides': [
+                    {'method': 'popup', 'minutes': 10},
+                    {'method': 'email', 'minutes': 1},
+                ],
+            },
+            'colorId': '11' # Red color
+        }
+        
+        service.events().insert(calendarId=calendar_id, body=event).execute()
+        print(f"Created Alert Event: {summary}")
+        
+    except Exception as e:
+        print(f"Failed to create report event: {e}")
+
 def get_week_events():
     """
     Fetches events for the next 7 days, highlighting Today.

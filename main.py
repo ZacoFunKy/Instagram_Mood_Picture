@@ -77,6 +77,13 @@ def main():
         print(f"Error fetching Music: {e}")
         print("Continuing without music data...")
         music_summary_str = "No music data available (Error fetching)."
+        
+        # [ALERT] Create calendar event for maintenance
+        if not args.dry_run:
+             calendar_client.create_report_event(
+                 "Echec YouTube Music", 
+                 f"Le script n'a pas pu lire l'historique YouTube. Les headers sont peut-être expirés.\nErreur: {e}"
+             )
 
     # C. Calendar
     calendar_summary_str = "No events."
@@ -122,6 +129,12 @@ def main():
         insta_web_client.update_profile_picture_web(mood_name)
     except Exception as e:
         print(f"Error updating Instagram: {e}")
+        # [ALERT] Create calendar event for maintenance
+        if not args.dry_run:
+             calendar_client.create_report_event(
+                 "Echec Instagram Update", 
+                 f"Le script n'a pas pu changer la photo.\nVérifie IG_SESSIONID ou la connexion.\nErreur: {e}"
+             )
 
     # 5. Save Log
     log_entry = {
