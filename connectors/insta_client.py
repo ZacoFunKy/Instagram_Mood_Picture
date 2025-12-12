@@ -9,7 +9,7 @@ import os
 def update_profile_picture(mood_name):
     """
     Updates the Instagram profile picture based on the Mood.
-    'mood_name' must match an image filename (e.g., 'confident.jpg').
+    'mood_name' must match an image filename (e.g., 'confident.png').
     """
     username = os.environ.get("IG_USERNAME")
     password = os.environ.get("IG_PASSWORD")
@@ -51,7 +51,7 @@ def update_profile_picture(mood_name):
 
     # Image path
     # We assume images are stored in an 'assets' folder
-    image_path = f"assets/{mood_name}.jpg"
+    image_path = f"assets/{mood_name}.png"
     
     if not os.path.exists(image_path):
         print(f"Image for mood '{mood_name}' not found at {image_path}. Skipping update.")

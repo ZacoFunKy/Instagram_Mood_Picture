@@ -147,7 +147,7 @@ def update_profile_picture_web(mood_name):
 
     client = InstaWebClient()
     if client.login(username, password):
-        image_path = f"assets/{mood_name}.jpg"
+        image_path = f"assets/{mood_name}.png"
         if os.path.exists(image_path):
             client.change_profile_picture(image_path)
         else:
