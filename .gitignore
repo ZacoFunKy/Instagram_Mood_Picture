@@ -1,0 +1,17 @@
+# Secrets
+.env
+# Secrets
+.env
+headers_auth.json
+creds.json
+tokens.json
+oauth_final.json
+
+# Dependencies
+venv/
+__pycache__/
+*.pyc
+
+# Assets (Commit images, but not temp files if any)
+!assets/
+
