@@ -28,6 +28,13 @@ class InstaWebClient:
         # If IG_SESSIONID is provided in env, we use it directly.
         # This bypasses User/Pass login and 2FA challenges.
         session_id = os.environ.get("IG_SESSIONID")
+        
+        # DEBUG: Check if variable exists
+        if "IG_SESSIONID" in os.environ:
+             print(f"DEBUG: IG_SESSIONID env var exists. Length: {len(os.environ['IG_SESSIONID'])}")
+        else:
+             print("DEBUG: IG_SESSIONID env var NOT found.")
+
         if session_id:
             print("Using IG_SESSIONID from environment...")
             self.session.cookies.set("sessionid", session_id)

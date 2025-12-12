@@ -5,6 +5,12 @@ on:
     # 3:00 AM UTC daily
     - cron: '0 3 * * *'
   workflow_dispatch: # Allows manual trigger
+    inputs:
+      no_ai:
+        description: 'Skip AI (Use default energetic)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   predict-and-update:
@@ -35,4 +41,9 @@ jobs:
         IG_TOTP_SEED: ${{ secrets.IG_TOTP_SEED }}
         TARGET_CALENDAR_ID: ${{ secrets.TARGET_CALENDAR_ID }}
         IG_SESSIONID: ${{ secrets.IG_SESSIONID }}
-      run: python main.py
+      run: |
+        if [ "${{ github.event.inputs.no_ai }}" == "true" ]; then
+          python main.py --no-ai
+        else
+          python main.py
+        fi
