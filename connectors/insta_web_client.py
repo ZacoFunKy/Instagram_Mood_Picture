@@ -54,12 +54,13 @@ class InstaWebClient:
                 
             clean_seed = totp_seed.replace(" ", "").strip().upper()
             
-            # Use instagrapi's totp generator if available, or fallback
+            # Use pyotp for TOTP generation (lightweight)
             try:
-                from instagrapi import Client as IGClient
-                code = IGClient().totp_generate_code(clean_seed)
+                import pyotp
+                totp = pyotp.TOTP(clean_seed)
+                code = totp.now()
             except ImportError:
-                print("Error: instagrapi not found for TOTP generation.")
+                print("Error: pyotp not found for TOTP generation.")
                 return False
                 
             # Submit 2FA Code

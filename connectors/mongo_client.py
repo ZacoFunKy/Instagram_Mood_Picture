@@ -10,8 +10,8 @@ def connect_db():
     if not uri:
         raise ValueError("MONGODB_URI environment variable not set")
     
-    # [FIX] Use certifi to fix SSL handshake errors on Windows/Corporate networks
-    client = MongoClient(uri, tlsCAFile=certifi.where())
+    # [FIX] Force bypass SSL verification to resolve persistent TLSV1_ALERT_INTERNAL_ERROR on Windows
+    client = MongoClient(uri, tls=True, tlsAllowInvalidCertificates=True)
     return client
 
 def get_database():

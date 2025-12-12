@@ -2,6 +2,8 @@ import os
 import datetime
 import sys
 import argparse
+import time
+import random
 from dotenv import load_dotenv
 
 # Load env vars from .env for local testing
@@ -21,6 +23,13 @@ def main():
         print("--- DRY RUN MODE ACTIVATED ---")
 
     print("--- Predictive Profile AI Starting ---")
+    
+    # [OPT] Randomize execution time (+/- 15 mins delay)
+    # Cron runs at 3:00. We delay between 0 and 900 seconds (15 mins).
+    if not args.dry_run:
+        delay = random.randint(0, 900)
+        print(f"Adding random delay of {delay} seconds to avoid detection...")
+        time.sleep(delay)
     
     # 1. Connect DB & Fetch History
     historical_moods = []
