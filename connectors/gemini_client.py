@@ -2,7 +2,7 @@ import os
 import google.generativeai as genai
 import datetime
 
-def construct_prompt(historical_moods, music_summary, calendar_summary):
+def construct_prompt(historical_moods, music_summary, calendar_summary, weather_summary):
     weekday = datetime.datetime.now().strftime("%A")
     patterns_str = str(historical_moods)
     
@@ -23,10 +23,16 @@ Ta tâche est d'analyser les signaux faibles et forts pour déterminer l'état �
 
 ### 2. ANALYSE DES CONTRAINTES (L'ENVIRONNEMENT)
 **Source : Agenda ({calendar_summary})**
+**Source : Météo ({weather_summary})**
 *Ceci dicte l'activité physique et mentale imposée.*
 
+**IMPACT MÉTÉO :**
+* ☀️ **Soleil :** Booste l'énergie (*Energetic*, *Confident*).
+* 🌧️ **Pluie/Grisaille :** Encourage le cocooning (*Chill*) ou la déprime (*Melancholy*).
+* ⛈️ **Orage :** Peut correspondre à une ambiance *Hard_work* (focus intense) ou *Melancholy*.
+
 **RÈGLES DE PRIORITÉ TEMPORELLE :**
-1.  **"--- FOCUS AUJOURD'HUI ---"** : C'est la vérité absolue de la journée. Si vide -> Se rabattre sur la musique.
+1.  **"--- FOCUS AUJOURD'HUI ---"** : C'est la vérité absolue de la journée. Si vide -> Se rabattre sur la musique et la météo.
 2.  **"--- CONTEXTE SEMAINE ---"** : Anticipe le stress. (Ex: Un partiel demain transforme une journée vide aujourd'hui en *Hard_work*).
 3.  **"--- CONTEXTE PASSÉ ---"** : Explique la fatigue. (Ex: Soirée hier -> *Chill* ou *Melancholy* aujourd'hui).
 
@@ -43,15 +49,15 @@ Ta tâche est d'analyser les signaux faibles et forts pour déterminer l'état �
 
 ---
 
-### PROTOCOLE DE DÉCISION FINAL
-Pour choisir le mood, suis cet arbre logique :
+### PROTOCOLE DE DÉCISION FINAL (ARBRE LOGIQUE)
+Pour choisir le mood, suis cet ordre :
 
 1.  **Y a-t-il du SPORT aujourd'hui ?** -> SI OUI : **energetic**.
-2.  **Y a-t-il une échéance ou un TRAVAIL intense (Exam, Projet) ?** -> SI OUI : **hard_work** (ou *overwhelmed* si agenda saturé).
-3.  **L'agenda est-il VIDE ou LÉGER ?**
-    * Si musique Triste/Lente -> **melancholy**.
-    * Si musique Énergique/Rap -> **confident** ou **creative**.
-    * Si musique Calme/Pop -> **chill**.
+2.  **Y a-t-il une échéance ou un TRAVAIL intense ?** -> SI OUI : **hard_work**.
+3.  **L'agenda est-il VIDE ou LÉGER ?** -> Regarde la *Musique* ET la *Météo*.
+    *   Si Musique Triste OU (Météo Pluvieuse ET Musique Calme) -> **melancholy**.
+    *   Si Musique Energetic OU Météo Grand Soleil -> **energetic** ou **confident**.
+    *   Si Musique Calme/Pop -> **chill**.
 4.  **Y a-t-il un événement SOCIAL majeur ?** -> **confident**.
 
 ### LISTE DES MOODS AUTORISÉS :
@@ -60,8 +66,8 @@ Pour choisir le mood, suis cet arbre logique :
 ### TA RÉPONSE :
 Donne UNIQUEMENT le mot du mood choisi, en minuscules, sans explication, sans ponctuation."""
 
-def predict_mood(historical_moods, music_summary, calendar_summary, dry_run=False):
-    prompt = construct_prompt(historical_moods, music_summary, calendar_summary)
+def predict_mood(historical_moods, music_summary, calendar_summary, weather_summary="Non disponible", dry_run=False):
+    prompt = construct_prompt(historical_moods, music_summary, calendar_summary, weather_summary)
     
     if dry_run:
         return {"mood": "dry_run", "prompt": prompt}

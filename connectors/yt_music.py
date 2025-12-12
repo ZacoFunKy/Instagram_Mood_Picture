@@ -4,49 +4,38 @@ import json
 import datetime
 
 def get_service():
-    """Initializes YTMusic with headers from env var."""
-    headers_json = os.environ.get("YTMUSIC_HEADERS")
-    if not headers_json:
-        raise ValueError("YTMUSIC_HEADERS environment variable not set")
+    """Initializes YTMusic with headers from env var or local file."""
     
-    # Priority 1: Browser Auth (headers_auth.json)
-    if os.path.exists("headers_auth.json"):
-        print("Using Browser Auth (headers_auth.json)...")
+    # 1. Priority: OAuth (Production/CI - Recommended)
+    oauth_env = os.environ.get("YTMUSIC_OAUTH")
+    if oauth_env:
         try:
-            with open("headers_auth.json", "r", encoding='utf-8') as f:
-                browser_headers = json.load(f)
-            return YTMusic(auth=browser_headers)
-        except json.JSONDecodeError as e:
-            print(f"CRITICAL ERROR reading headers_auth.json: {e}")
-            with open("headers_auth.json", "r", encoding='utf-8') as f:
-                print(f"File content preview: {f.read()[:100]}")
-            raise e
+            # Check if it's already a file path or raw JSON
+            # We assume it's the raw JSON content of oauth.json
+            with open("oauth.json", "w", encoding='utf-8') as f:
+                f.write(oauth_env)
+            return YTMusic("oauth.json")
+        except Exception as e:
+            print(f"Error initializing YTMusic via OAuth: {e}")
 
-    # Priority 2: OAuth (from env)
-    # Try to load formatted JSON from env
-    try:
-        headers = json.loads(headers_json)
-        # Split into tokens.json and creds.json
-        # creds.json needs client_id, client_secret (and maybe nothing else)
-        # [FIX] Use env vars for sensitive OAuth data
-        creds = {
-            "client_id": os.environ.get("GOOGLE_CLIENT_ID", "YOUR_CLIENT_ID"),
-            "client_secret": os.environ.get("GOOGLE_CLIENT_SECRET", "YOUR_CLIENT_SECRET")
-        }
-        with open("creds.json", "w") as f:
-            json.dump(creds, f)
+    # 2. Priority: Legacy Headers (Env)
+    headers_json = os.environ.get("YTMUSIC_HEADERS")
+    if headers_json:
+        try:
+            headers_dict = json.loads(headers_json)
+            return YTMusic(auth=headers_dict)
+        except Exception as e:
+             pass
 
-        # tokens.json needs the tokens (headers_json provided by user)
-        # We assume headers contains keys like access_token, etc.
-        # We REMOVE client_id/secret from this one to be safe
-        tokens = {k:v for k,v in headers.items() if k not in ["client_id", "client_secret"]}
-        
-        with open("tokens.json", "w") as f:
-            json.dump(tokens, f)
-            
-        return YTMusic(auth="tokens.json", oauth_credentials="creds.json")
-    except json.JSONDecodeError:
-        raise ValueError("YTMUSIC_HEADERS must be valid JSON")
+    # 3. Priority: Local File (Development)
+    if os.path.exists("headers_auth.json"):
+        try:
+            return YTMusic("headers_auth.json")
+        except:
+             pass
+
+    # 4. Fallback / Failure
+    raise ValueError("YouTube Music authentication failed. Set YTMUSIC_OAUTH (preferred) or YTMUSIC_HEADERS.")
 
 def get_yesterday_music():
     """
