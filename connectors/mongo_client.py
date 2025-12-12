@@ -1,68 +1,387 @@
+"""
+MongoDB client for daily mood logs and historical data.
+
+This module provides database operations for:
+- Storing daily mood predictions with context
+- Retrieving historical mood patterns by weekday
+- Maintenance: cleaning old logs to maintain database size
+"""
+
 import os
+import logging
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Any
+
 import pymongo
 from pymongo import MongoClient
-import datetime
+from pymongo.errors import ServerSelectionTimeoutError, PyMongoError
 import certifi
 
-def connect_db():
-    """Connects to MongoDB Atlas using the URI from environment variables."""
-    uri = os.environ.get("MONGODB_URI")
-    if not uri:
-        raise ValueError("MONGODB_URI environment variable not set")
-    
-    # [FIX] Standard robust connection for Atlas
-    # 'tlsCAFile' ensures we use valid CA certificates (fixes Windows issues).
-    # We do NOT use 'tlsAllowInvalidCertificates' in production as it is insecure.
-    client = MongoClient(uri, tlsCAFile=certifi.where())
-    return client
 
-def get_database():
-    """Returns the database instance."""
-    client = connect_db()
-    # Assuming the database name is 'predictive_profile' or similar, 
-    # but the URI might include it. Let's default to a name if not extracted.
-    # For simplicity, we'll use a specific db name: 'profile_predictor'
-    return client['profile_predictor']
+logger = logging.getLogger(__name__)
 
-def clean_old_logs(collection):
-    """
-    Keep only the last 365 documents.
-    If count > 365, delete the oldest ones.
-    """
-    count = collection.count_documents({})
-    if count > 365:
-        # Remove oldest to maintain 365. 
-        # Ideally we remove count - 365 docs.
-        to_remove = count - 365
-        # Find the oldest 'to_remove' docs
-        # We assume there is a 'date' or timestamp field to sort by. 
-        # The spec says "date": "2023-10-24" (string). String sort YYYY-MM-DD works.
-        cursor = collection.find().sort("date", pymongo.ASCENDING).limit(to_remove)
-        ids_to_delete = [doc["_id"] for doc in cursor]
-        if ids_to_delete:
-            collection.delete_many({"_id": {"$in": ids_to_delete}})
-            print(f"Cleaned {len(ids_to_delete)} old logs.")
+# ============================================================================
+# CONSTANTS
+# ============================================================================
 
-def get_historical_moods(collection, weekday):
-    """
-    Fetch the last 4 logs for the given weekday.
-    """
-    # weekday e.g. "Tuesday"
-    cursor = collection.find({"weekday": weekday}).sort("date", pymongo.DESCENDING).limit(4)
-    # Return list reversed so it's chronological (oldest to newest of the last 4)
-    return list(cursor)[::-1]
+DATABASE_NAME = "profile_predictor"
+LOGS_COLLECTION_NAME = "daily_logs"
+MAX_LOG_RETENTION_DAYS = 365
+CONNECTION_TIMEOUT_MS = 10000
+DEFAULT_LOG_LIMIT = 4
 
-def save_log(collection, data):
+
+# ============================================================================
+# EXCEPTIONS
+# ============================================================================
+
+class MongoDBConnectionError(Exception):
+    """Raised when MongoDB connection fails."""
+    pass
+
+
+class MongoDBOperationError(Exception):
+    """Raised when database operations fail."""
+    pass
+
+
+# ============================================================================
+# DATABASE CONNECTION
+# ============================================================================
+
+class DatabaseConfig:
+    """Encapsulates MongoDB connection configuration."""
+
+    def __init__(self, uri: Optional[str] = None):
+        """
+        Initialize database configuration.
+
+        Args:
+            uri: MongoDB connection URI (defaults to MONGODB_URI env var)
+
+        Raises:
+            ValueError: If URI not provided and env var not set
+        """
+        self.uri = uri or os.environ.get("MONGODB_URI")
+        if not self.uri:
+            raise ValueError("MONGODB_URI environment variable not set")
+
+    def get_client(self) -> MongoClient:
+        """
+        Creates a MongoDB client with secure SSL/TLS configuration.
+
+        Returns:
+            Connected MongoClient instance
+
+        Raises:
+            MongoDBConnectionError: If connection fails
+        """
+        try:
+            # Use certifi for secure CA bundle (fixes Windows TLS issues)
+            client = MongoClient(
+                self.uri,
+                tlsCAFile=certifi.where(),
+                serverSelectionTimeoutMS=CONNECTION_TIMEOUT_MS,
+                connectTimeoutMS=CONNECTION_TIMEOUT_MS
+            )
+            # Verify connection
+            client.admin.command('ping')
+            logger.info("[OK] MongoDB connected successfully")
+            return client
+
+        except ServerSelectionTimeoutError:
+            logger.error("MongoDB connection timeout")
+            raise MongoDBConnectionError("Connection timeout") from None
+        except pymongo.errors.OperationFailure as e:
+            logger.error(f"MongoDB authentication failed: {e}")
+            raise MongoDBConnectionError(f"Authentication failed: {e}") from None
+        except Exception as e:
+            logger.error(f"MongoDB connection failed: {e}")
+            raise MongoDBConnectionError(str(e)) from e
+
+
+class DatabaseConnection:
+    """Singleton connection manager for MongoDB."""
+
+    _instance: Optional['DatabaseConnection'] = None
+    _client: Optional[MongoClient] = None
+
+    def __new__(cls) -> 'DatabaseConnection':
+        """Singleton pattern: single instance."""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def get_client(self) -> MongoClient:
+        """
+        Gets or creates MongoDB client.
+
+        Returns:
+            MongoClient instance
+
+        Raises:
+            MongoDBConnectionError: If connection fails
+        """
+        if self._client is None:
+            try:
+                config = DatabaseConfig()
+                self._client = config.get_client()
+            except ValueError as e:
+                logger.error(str(e))
+                raise MongoDBConnectionError(str(e)) from e
+
+        return self._client
+
+    def get_database(self) -> pymongo.database.Database:
+        """
+        Gets database instance.
+
+        Returns:
+            MongoDB database object
+
+        Raises:
+            MongoDBConnectionError: If connection fails
+        """
+        client = self.get_client()
+        return client[DATABASE_NAME]
+
+    def close(self) -> None:
+        """Closes database connection."""
+        if self._client:
+            self._client.close()
+            self._client = None
+            logger.info("MongoDB connection closed")
+
+
+# ============================================================================
+# LOG MANAGEMENT
+# ============================================================================
+
+class DailyLogManager:
+    """Manages daily mood log storage and retrieval."""
+
+    @staticmethod
+    def save_log(collection: pymongo.collection.Collection, entry: Dict[str, Any]) -> None:
+        """
+        Saves or updates a daily log entry.
+
+        Performs upsert based on date (one log per day).
+
+        Args:
+            collection: MongoDB collection
+            entry: Log entry dict with 'date', 'mood_selected', etc.
+
+        Raises:
+            MongoDBOperationError: If save fails
+
+        Example:
+            >>> entry = {
+            ...     "date": "2025-12-12",
+            ...     "weekday": "Friday",
+            ...     "mood_selected": "energetic",
+            ...     "music_summary": "...",
+            ...     "calendar_summary": "..."
+            ... }
+            >>> DailyLogManager.save_log(collection, entry)
+        """
+        try:
+            date_str = entry.get("date")
+            if not date_str:
+                raise ValueError("Entry missing 'date' field")
+
+            # Upsert: update if exists, insert if not
+            result = collection.replace_one(
+                {"date": date_str},
+                entry,
+                upsert=True
+            )
+
+            if result.upserted_id:
+                logger.info(f"[OK] New log inserted for {date_str}")
+            else:
+                logger.info(f"[OK] Log updated for {date_str}")
+
+        except pymongo.errors.DuplicateKeyError as e:
+            logger.error(f"Duplicate key error: {e}")
+            raise MongoDBOperationError(f"Duplicate entry for {entry.get('date')}") from e
+        except Exception as e:
+            logger.error(f"Failed to save log: {e}")
+            raise MongoDBOperationError(f"Save failed: {e}") from e
+
+    @staticmethod
+    def get_historical_moods(collection: pymongo.collection.Collection,
+                             weekday: str,
+                             limit: int = DEFAULT_LOG_LIMIT) -> List[Dict[str, Any]]:
+        """
+        Retrieves historical moods for a specific weekday.
+
+        Used for trend analysis and contextual mood prediction.
+
+        Args:
+            collection: MongoDB collection
+            weekday: Day name (e.g., "Monday", "Tuesday")
+            limit: Maximum number of entries to retrieve
+
+        Returns:
+            List of log entries (chronological order: oldest to newest)
+
+        Example:
+            >>> moods = DailyLogManager.get_historical_moods(collection, "Friday")
+            >>> print(f"Last 4 Fridays: {[m['mood_selected'] for m in moods]}")
+        """
+        try:
+            cursor = collection.find({"weekday": weekday}).sort(
+                "date",
+                pymongo.DESCENDING
+            ).limit(limit)
+
+            entries = list(cursor)
+            # Reverse to chronological order (oldest to newest)
+            entries = entries[::-1]
+
+            logger.info(f"[OK] Retrieved {len(entries)} historical moods for {weekday}")
+            return entries
+
+        except Exception as e:
+            logger.error(f"Failed to retrieve historical moods for {weekday}: {e}")
+            raise MongoDBOperationError(f"Retrieval failed: {e}") from e
+
+    @staticmethod
+    def clean_old_logs(collection: pymongo.collection.Collection,
+                      retention_days: int = MAX_LOG_RETENTION_DAYS) -> int:
+        """
+        Deletes logs older than retention period.
+
+        Maintenance operation to keep database size manageable.
+
+        Args:
+            collection: MongoDB collection
+            retention_days: Days to retain (default 365)
+
+        Returns:
+            Number of deleted documents
+
+        Example:
+            >>> deleted = DailyLogManager.clean_old_logs(collection)
+            >>> print(f"Deleted {deleted} old logs")
+        """
+        try:
+            cutoff_date = (datetime.now() - timedelta(days=retention_days)).strftime("%Y-%m-%d")
+
+            # Count before deletion
+            count_before = collection.count_documents({})
+
+            # Delete documents with date < cutoff_date
+            result = collection.delete_many({"date": {"$lt": cutoff_date}})
+
+            deleted_count = result.deleted_count
+            count_after = collection.count_documents({})
+
+            if deleted_count > 0:
+                logger.info(f"🧹 Cleaned {deleted_count} old logs. "
+                          f"Retention: {retention_days} days. "
+                          f"Total before: {count_before}, after: {count_after}")
+
+            return deleted_count
+
+        except Exception as e:
+            logger.warning(f"Log cleanup failed: {e}")
+            return 0
+
+
+# ============================================================================
+# PUBLIC API (BACKWARD COMPATIBLE)
+# ============================================================================
+
+def get_database() -> pymongo.database.Database:
     """
-    Insert a new daily log or update if it exists for the same date.
-    Triggers cleanup.
+    Gets database instance.
+
+    This is the main entry point for database access.
+
+    Returns:
+        MongoDB database object
+
+    Raises:
+        MongoDBConnectionError: If connection fails
+
+    Example:
+        >>> db = get_database()
+        >>> logs = db['daily_logs']
     """
-    # Assuming 'date' ("YYYY-MM-DD") is the unique key for a daily log
-    date_str = data.get("date")
-    if date_str:
-        collection.replace_one({"date": date_str}, data, upsert=True)
-    else:
-        # Fallback if no date (shouldn't happen given main.py logic)
-        collection.insert_one(data)
-        
-    clean_old_logs(collection)
+    try:
+        conn = DatabaseConnection()
+        return conn.get_database()
+    except MongoDBConnectionError as e:
+        logger.error(f"Database connection failed: {e}")
+        raise
+
+
+def connect_db() -> MongoClient:
+    """
+    Gets MongoDB client instance.
+
+    Maintained for backward compatibility.
+
+    Returns:
+        MongoClient instance
+
+    Raises:
+        MongoDBConnectionError: If connection fails
+
+    Deprecated:
+        Use get_database() instead
+    """
+    try:
+        conn = DatabaseConnection()
+        return conn.get_client()
+    except MongoDBConnectionError as e:
+        logger.error(f"Failed to connect: {e}")
+        raise
+
+
+def save_log(collection: pymongo.collection.Collection, data: Dict[str, Any]) -> None:
+    """
+    Saves a daily log entry.
+
+    Args:
+        collection: MongoDB collection
+        data: Log entry dict
+
+    Raises:
+        MongoDBOperationError: If save fails
+    """
+    manager = DailyLogManager()
+    manager.save_log(collection, data)
+    # Perform maintenance after each save
+    try:
+        manager.clean_old_logs(collection)
+    except Exception as e:
+        logger.warning(f"Log cleanup warning: {e}")
+
+
+def get_historical_moods(collection: pymongo.collection.Collection,
+                        weekday: str) -> List[Dict[str, Any]]:
+    """
+    Retrieves historical moods for a weekday.
+
+    Args:
+        collection: MongoDB collection
+        weekday: Day name (e.g., "Monday")
+
+    Returns:
+        List of historical mood entries
+    """
+    manager = DailyLogManager()
+    return manager.get_historical_moods(collection, weekday)
+
+
+def clean_old_logs(collection: pymongo.collection.Collection) -> None:
+    """
+    Cleans old logs from database.
+
+    Args:
+        collection: MongoDB collection
+    """
+    manager = DailyLogManager()
+    manager.clean_old_logs(collection)

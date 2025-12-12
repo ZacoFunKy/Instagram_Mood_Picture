@@ -1,0 +1,73 @@
+name: Predict Mood - Two Daily Executions
+
+on:
+  schedule:
+    # 3am UTC = Nuit/Très tôt matin - Prédiction pour la journée qui arrive
+    - cron: '0 3 * * *'
+    # 2pm UTC = Après-midi - Prédiction pour ce soir et demain matin
+    - cron: '0 14 * * *'
+  
+  # Permet aussi de lancer manuellement via GitHub Actions UI avec options
+  workflow_dispatch:
+    inputs:
+      no_ai:
+        description: 'Skip AI (Use default energetic)'
+        required: false
+        type: boolean
+        default: false
+      no_delay:
+        description: 'Skip random delay (Immediate run)'
+        required: false
+        type: boolean
+        default: false
+      dry_run:
+        description: 'Run in dry-run mode (no Instagram update)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  predict-mood:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run Mood Prediction
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+          GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+          TARGET_CALENDAR_ID: ${{ secrets.TARGET_CALENDAR_ID }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          IG_USERNAME: ${{ secrets.IG_USERNAME }}
+          IG_PASSWORD: ${{ secrets.IG_PASSWORD }}
+          IG_TOTP_SEED: ${{ secrets.IG_TOTP_SEED }}
+          IG_SESSIONID: ${{ secrets.IG_SESSIONID }}
+        run: |
+          ARGS=""
+          if [ "${{ github.event.inputs.no_ai }}" = "true" ]; then ARGS="$ARGS --no-ai"; fi
+          if [ "${{ github.event.inputs.no_delay }}" = "true" ]; then ARGS="$ARGS --no-delay"; fi
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          python main.py $ARGS
+      
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: execution-logs
+          path: |
+            *.log
+            dry_run_prompt.log
