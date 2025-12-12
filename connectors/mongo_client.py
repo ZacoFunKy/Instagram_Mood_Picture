@@ -2,13 +2,16 @@ import os
 import pymongo
 from pymongo import MongoClient
 import datetime
+import certifi
 
 def connect_db():
     """Connects to MongoDB Atlas using the URI from environment variables."""
     uri = os.environ.get("MONGODB_URI")
     if not uri:
         raise ValueError("MONGODB_URI environment variable not set")
-    client = MongoClient(uri)
+    
+    # [FIX] Use certifi to fix SSL handshake errors on Windows/Corporate networks
+    client = MongoClient(uri, tlsCAFile=certifi.where())
     return client
 
 def get_database():
