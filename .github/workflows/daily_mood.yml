@@ -33,5 +33,7 @@ jobs:
         IG_USERNAME: ${{ secrets.IG_USERNAME }}
         IG_PASSWORD: ${{ secrets.IG_PASSWORD }}
         IG_TOTP_SEED: ${{ secrets.IG_TOTP_SEED }}
+        IG_TOTP_SEED: ${{ secrets.IG_TOTP_SEED }}
         TARGET_CALENDAR_ID: ${{ secrets.TARGET_CALENDAR_ID }}
+        IG_SESSIONID: ${{ secrets.IG_SESSIONID }}
       run: python main.py

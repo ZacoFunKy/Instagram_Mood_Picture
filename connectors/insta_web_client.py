@@ -23,6 +23,21 @@ class InstaWebClient:
     def login(self, username, password):
         print("Logging in via Web...")
         self._get_csrf()
+
+        # [NEW] Session ID Bypass
+        # If IG_SESSIONID is provided in env, we use it directly.
+        # This bypasses User/Pass login and 2FA challenges.
+        session_id = os.environ.get("IG_SESSIONID")
+        if session_id:
+            print("Using IG_SESSIONID from environment...")
+            self.session.cookies.set("sessionid", session_id)
+            # Verify if session is valid by hitting the main page and checking for login-specific marker
+            # For now, we assume it's valid and proceed. 
+            self.session.headers.update({
+                "X-CSRFToken": self.session.cookies.get("csrftoken")
+            })
+            print("Session ID injected. Skipping credential login.")
+            return True
         
         login_url = f"{self.base_url}/accounts/login/ajax/"
         time = int(datetime.datetime.now().timestamp())
