@@ -1,65 +1,21 @@
---- PROMPT GENERATED ON 2025-12-13 00:52:10.802573 ---
-Tu es une IA experte en psychologie comportementale et en analyse de données contextuelles. Tu gères l'avatar numérique de l'utilisateur.
+--- PROMPT GENERATED ON 2025-12-13 01:13:20.511974 ---
 
-**CONTEXTE TEMPOREL :**
-- Jour : Saturday
-- Heure : 0h
-- Saison : Hiver
-- Phase hebdomadaire : Weekend (récupération)
-- Moment musical : Tôt le matin (réveil/activation)
+### RÔLE
+Tu es une IA de mood-triage. Ta sortie est **un seul mot** (mood autorisé) en minuscules.
 
-Ta tâche est d'analyser les signaux faibles et forts pour déterminer l'état émotionnel et l'énergie de l'utilisateur.
+### CONTEXTE D'EXÉCUTION (MATIN - 3h)
+- Jour / date : Saturday 13/12
+- Heure locale : 01:14
+- Portée : Prévision pour aujourd'hui et ce soir.
+- Historique moods : Non fourni
 
----
+### PRÉ-ANALYSE (PRIORITAIRE SI PRÉSENTE)
+Poids sources: agenda:40%, sleep:30%, weather:15%, music:10%, time:5%
+Top pré-analyse: chill:2.0 / creative:1.5 / confident:1.5
 
-# ═══════════════════════════════════════════════════════════════════════════
-# SECTION 1 : PRÉ-ANALYSE ALGORITHMIQUE (PRIORITAIRE)
-# ═══════════════════════════════════════════════════════════════════════════
-
-## 📊 PRÉDICTIONS PONDÉRÉES (Analyse automatique)
-
-**POIDS DES SOURCES (par importance) :**
-  - Agenda: **40%**
-  - Sleep: **30%**
-  - Weather: **15%**
-  - Music: **10%**
-  - Time: **5%**
-
-**TOP 3 MOODS PRÉDITS :**
-  1. **chill** (score: 2.0)
-  2. **creative** (score: 1.5)
-  3. **confident** (score: 1.5)
-
-## 🎯 PROTOCOLE D'UTILISATION (ÉTAPE PAR ÉTAPE)
-
-**ÉTAPE 1 - BASELINE :**
-Prends le **TOP 1** comme point de départ de ton analyse.
-
-**ÉTAPE 2 - ANALYSE CRITIQUE :**
-Analyse les données brutes (section 2) avec ton expertise :
-  ✓ Si les données confirment le TOP 1 → **VALIDE-LE**
-  ⚠️ Si tu détectes une incohérence ou un signal manquant → **AJUSTE**
-
-**ÉTAPE 3 - DÉCISION FINALE :**
-Tu es LIBRE de choisir :
-  - Le **TOP 1** si l'analyse algorithmique est cohérente
-  - Le **TOP 2 ou TOP 3** si plus adapté aux données qualitatives  
-  - Un **autre mood** si tu détectes un signal fort manqué (événement critique, pattern inhabituel)
-
-**RÈGLE IMPORTANTE :** L'algorithme donne une baseline scientifique, mais TOI seul vois les nuances contextuelles.
-Utilise ton jugement d'expert pour la décision finale. Si tu ajustes, explique pourquoi brièvement dans ta réflexion interne.
-
----
-
-# ═══════════════════════════════════════════════════════════════════════════
-# SECTION 2 : DONNÉES BRUTES (Pour valider la pré-analyse)
-# ═══════════════════════════════════════════════════════════════════════════
-
-Utilise ces données pour **valider** ou **ajuster** la prédiction de la Section 1.
-
-
-### 1. ANALYSE CONTEXTUELLE - AGENDA (L'ENVIRONNEMENT)
-**Source : Agenda (--- CONTEXTE PASSÉ (Hier/Avant-hier) ---
+### DONNÉES BRUTES (ne pas inventer)
+- Agenda (aujourd'hui + contexte semaine) :
+--- CONTEXTE PASSÉ (Hier/Avant-hier) ---
 [zactanji@gmail.com] 2025-12-11T08:00:00+01:00: Sql
 [zactanji@gmail.com] 2025-12-11T08:00:00+01:00: Com pro 
 [zactanji@gmail.com] 2025-12-12T11:00:00+01:00: Sport
@@ -68,147 +24,47 @@ Utilise ces données pour **valider** ou **ajuster** la prédiction de la Sectio
 
 --- CONTEXTE SEMAINE ---
 [zactanji@gmail.com] 2025-12-16T16:00:00+01:00: Controle Terminale - Start orga
-[zactanji@gmail.com] 2025-12-17: Visite Crous pour les blattes)**
+[zactanji@gmail.com] 2025-12-17: Visite Crous pour les blattes
+- Sommeil : coucher 00:15 / réveil 09:10 / durée 9.0h
+- Météo : Meteo Bordeaux: Nuageux (Overcast), Min 7.3C, Max 13.9C.
+- Musique / historique :
+Vibe Global: NEUTRE / FOCUS (Valence moy: 0.45, Energy moy: 0.58, Tempo moy: 136 BPM)
 
-**RÈGLES DE PRIORITÉ TEMPORELLE :**
-1. **"--- FOCUS AUJOURD'HUI ---"** : C'est la vérité absolue. Si vide → musique + météo + contexte temporel.
-2. **"--- CONTEXTE SEMAINE ---"** : Anticipe le stress (ex: partiel demain → **hard_work** ou **intense** aujourd'hui).
-3. **"--- CONTEXTE PASSÉ ---"** : Explique la fatigue.
+Titres: Milky Chance - Stolen Dance [V:0.56 E:0.64 D:0.48 T:148], Harry Styles - As It Was [V:0.62 E:0.71 D:0.53 T:153], Mr. Probz - Waves (Robin Schulz Radio Edit) [V:0.55 E:0.63 D:0.47 T:147], Chill Nation, 1.6M views - Rihanna - Where Have You Been (TikTok Orchestra Remix) [V:0.50 E:0.50 D:0.50 T:120], A.C.T - Prayer in C (Deluxe Edit) [V:0.27 E:0.31 D:0.23 T:123], Tom Odell - Another Love (Tiësto Remix) [V:0.50 E:0.57 D:0.43 T:142], WILLOW - Wait a Minute! [V:0.57 E:0.65 D:0.49 T:148], ALTÉGO, 4.1M views - The Black Eyed Peas, Lykke Li, Altégo - MEET ME HALFWAY x I FOLLOW RIVERS (ALTÉGO MIX) [V:0.50 E:0.50 D:0.50 T:120], Bleu Soleil, Luiza - Soleil Bleu [V:0.55 E:0.63 D:0.47 T:147], The Big 80s guys - Sweet Dreams (Are Made of This) [V:0.21 E:0.24 D:0.18 T:118], John Newman - Love Me Again [V:0.56 E:0.64 D:0.48 T:148], aidannn, 1.7M views - the spins x kids (remix by aidannn) [V:0.50 E:0.50 D:0.50 T:120], Calvin Harris - My Way [V:0.51 E:0.58 D:0.44 T:143], Nelly Furtado - Say It Right [V:0.59 E:0.67 D:0.50 T:150], rudo made it, COSKO - Where Have You Been (Orchestra Version) [V:0.37 E:0.42 D:0.32 T:131], Luke Muzzic - Roi (Edit, slowed to perfection) [V:0.34 E:0.39 D:0.29 T:129], Bakermat - Baianá [V:0.51 E:0.58 D:0.43 T:143], YALL, Gabriela Richardson - Hundred Miles [V:0.47 E:0.54 D:0.40 T:140], Daft Punk, Pharrell Williams, Nile Rodgers - Get Lucky (feat. Pharrell Williams and Nile Rodgers) [V:0.56 E:0.64 D:0.48 T:148], The Magician, Inner City - Big Fun [V:0.27 E:0.30 D:0.23 T:122], Indila - Dernière danse [V:0.57 E:0.65 D:0.49 T:148], The Weeknd - Blinding Lights [V:0.64 E:0.73 D:0.55 T:154], Mark Ronson - Nothing Breaks Like a Heart (feat. Miley Cyrus) [V:0.52 E:0.59 D:0.44 T:144], Adele - Rolling in the Deep [V:0.57 E:0.65 D:0.49 T:148], Coldplay - A Sky Full of Stars [V:0.60 E:0.69 D:0.52 T:151], Lykke Li - I Follow Rivers (The Magician Remix) [V:0.46 E:0.53 D:0.40 T:139], Kerchak - Flynt et Mungo [V:0.24 E:0.47 D:0.50 T:120], Ninho, 138M views - Jefe [V:0.50 E:0.50 D:0.50 T:120], Sofiane - Lundi [V:0.39 E:0.64 D:0.63 T:133], Videoclub - Mai [V:0.48 E:0.55 D:0.41 T:141], GAULOIS - Jolie (feat. Ninho) [V:0.41 E:0.66 D:0.65 T:134], Ravyn Lenae - Love Me Not [V:0.60 E:0.68 D:0.51 T:151], UZI, JKSN - 50G [V:0.41 E:0.66 D:0.65 T:134], disiz, Theodora - melodrama [V:0.60 E:0.68 D:0.51 T:151], Ninho - La vie qu'on mène [V:0.52 E:0.59 D:0.44 T:144], PLK - Nouvelles [V:0.51 E:0.78 D:0.73 T:143], Heuss L'enfoiré - L'enfoiré [V:0.39 E:0.65 D:0.64 T:133], Gazo - CELINE 3X [V:0.39 E:0.64 D:0.63 T:133], Mig - James Gordon [V:0.30 E:0.54 D:0.55 T:125], 1PLIKATION - BATARD 2 [V:0.33 E:0.58 D:0.58 T:128], Mola - Freestyle 2 MI-TEMPS [V:0.27 E:0.51 D:0.53 T:123], Koba LaD - Aventador [V:0.41 E:0.66 D:0.65 T:134], Mig - Oswald Cobblepot [V:0.28 E:0.52 D:0.54 T:124], 2ZG - PAOLA LOCATELLI [V:0.35 E:0.60 D:0.60 T:130], Maes - Dybala (feat. Jul) [V:0.50 E:0.50 D:0.50 T:120], Raplume, Bilouki - Olivia Pope [V:0.37 E:0.62 D:0.61 T:131], La Rvfleuze - Money in the Bank [V:0.48 E:0.74 D:0.71 T:140], Beendo Z - Jordy [V:0.27 E:0.30 D:0.23 T:122], Ninho - Binks to Binks 7 [V:0.41 E:0.66 D:0.65 T:134], JRK 19 - Avenue Porte Brunet 2 [V:0.36 E:0.61 D:0.61 T:130]
 
-**INTERPRÉTATION ACTIVITÉS :**
-* 🏃 **SPORT INTENSE** (Crossfit, Compétition, HIIT) → **pumped**
-* 🚴 **SPORT MODÉRÉ** (Run, Gym, Yoga) → **energetic**
-* 🧠 **TRAVAIL CRÉATIF** (Design, Dev, Art) → **creative**
-* 📚 **ÉTUDES/FOCUS** (Exam, Projet urgent, Réunion) → **hard_work** ou **intense**
-* 🎉 **SOCIAL ACTIF** (Fête, Soirée, Concert) → **confident** ou **pumped**
-* 🍽️ **SOCIAL CALME** (Resto, Café) → **confident**
-* 😰 **SURCHARGE** (> 6h dense) → **intense** ou **tired**
-* 🛌 **REPOS/VIDE** → Voir musique + météo
+### MÉTHODE (RAISONNE EN 4 ÉTAPES)
+1) Agenda d'abord : identifie charge (réunions serrées, livrables, déplacements) et nature (créatif, deep work, social, sport). Charge haute → hard_work/intense; créatif long sans stress → creative; social positif → confident/energetic; sport matinal → pumped/energetic.
+2) Sommeil ensuite : <5h = fatigue forte, 5-7h = légère fatigue, 7-9h = neutre, >9h = repos/chill. Si sommeil très court et agenda chargé → hard_work mais énergie basse (tired si peu de contraintes). Sommeil long + peu d'agenda → chill/creative.
+3) Météo : pluie/froid → réduit énergie (baisse confident/energetic, monte melancholy/tired/chill); soleil/chaleur modérée → monte confident/energetic; chaleur forte peut fatiguer (favorise tired/chill si déjà chargé).
+4) Musique : BPM/énergie/valence. Haute énergie/tempo + valence haute → pumped/energetic/confident. Énergie basse + valence basse → melancholy/tired. Si musique contredit agenda+sommeil, garde agenda+sommeil comme ancre et ajuste seulement si cohérent.
 
-**IMPACT DU JOUR :**
-* **Lundi** : Reprise → **hard_work** (sauf repos)
-* **Vendredi** : Libération → **confident** ou **pumped**
-* **Samedi/Dimanche** : Repos → **chill** ou **energetic**
+### GUIDE DE SÉLECTION DU MOOD (RÈGLES CONCRÈTES)
+- creative: journée légère, tâches ouvertes/créatives, sommeil ok (≥7h), météo neutre/agréable, musique plutôt inspirante/modérée.
+- hard_work: livrables, réunions serrées, déplacements, beaucoup de tâches exigeantes; sommeil insuffisant n’annule pas, le devoir prime.
+- confident: social positif, présentations, bonnes nouvelles; météo agréable; musique à haute valence et énergie modérée/haute.
+- chill: peu de contraintes, volonté de détente/recovery; sommeil long ou besoin de repos; météo maussade mais sans obligations.
+- energetic: sport prévu, déplacement dynamique, peu de stress; sommeil ok; météo agréable; musique énergique.
+- melancholy: météo et musique basses en valence, introspection; peu de contraintes et sommeil moyen; éviter si obligations fortes.
+- intense: charge critique + stress/urgence; météo/chaleur/orage peuvent accentuer; musique forte peut soutenir.
+- pumped: sport/compétition imminent, musique très énergique; privilégier si activité physique est au centre.
+- tired: <5h ou dette de sommeil marquée, peu de contraintes; si contraintes élevées, reste sur hard_work.
 
----
+### CAS PARTICULIERS ET CONTRADICTIONS
+- Sommeil très court + social positif: choisis confident si obligations sociales essentielles, sinon tired/chill.
+- Agenda créatif + musique tristounette: reste sur creative si sommeil/météo OK; n’ajuste à melancholy que si absence de contraintes et valence très basse.
+- Sport prévu mais météo très mauvaise: pumped si indoor; sinon energetic/chill selon fatigue.
+- Données manquantes: utilise agenda comme ancre, sommeil comme modérateur, météo/musique comme affinement.
 
-### 2. ANALYSE PHYSIOLOGIQUE - SOMMEIL
-**Source : Estimation via activité musicale**
+### RÈGLES DE PRIORISATION
+- Si pré-analyse existe : pars du TOP 1 comme baseline et ne le changes que si un signal fort le contredit.
+- Signal critique (deadline, sport intense, <5h de sommeil) > reste.
+- Si signaux contradictoires, privilégie sommeil + agenda, puis ajuste avec météo (modère énergie) et musique (finesse du ton).
+- Si données manquantes, reste prudent :
+    * agenda chargé → hard_work ;
+    * agenda léger → chill ;
+    * social sans info énergie → confident ou chill selon ton météo/musique.
+- Pas de justification dans la sortie : réponds uniquement le mood choisi parmi creative, hard_work, confident, chill, energetic, melancholy, intense, pumped, tired.
 
-**DONNÉES DE SOMMEIL :**
-* Coucher estimé : 00:00
-* Réveil estimé : 09:00
-* Durée totale : **9.0h**
-
-**IMPACT SUR L'HUMEUR :**
-* **< 5h** : Épuisement total → **tired**
-* **5-6h** : Fatigue significative → **tired** (léger)
-* **6-7h** : Légère fatigue → Neutre (suit musique/agenda)
-* **7-9h** : OPTIMAL → Neutre (aucun signal fatigue)
-* **> 9h** : Récupération profonde → **chill** (repos)
-
----
-
-### 3. ANALYSE SENSORIELLE - MUSIQUE & HISTORIQUE
-**Source : Historique d'écoute**
-**Vibe Global: NEUTRE / FOCUS (Valence moy: 0.45, Energy moy: 0.58, Tempo moy: 136 BPM)
-
-Titres: Milky Chance - Stolen Dance [V:0.56 E:0.64 D:0.48 T:148], Harry Styles - As It Was [V:0.62 E:0.71 D:0.53 T:153], Mr. Probz - Waves (Robin Schulz Radio Edit) [V:0.55 E:0.63 D:0.47 T:147], Chill Nation, 1.6M views - Rihanna - Where Have You Been (TikTok Orchestra Remix) [V:0.50 E:0.50 D:0.50 T:120], A.C.T - Prayer in C (Deluxe Edit) [V:0.27 E:0.31 D:0.23 T:123], Tom Odell - Another Love (Tiësto Remix) [V:0.50 E:0.57 D:0.43 T:142], WILLOW - Wait a Minute! [V:0.57 E:0.65 D:0.49 T:148], ALTÉGO, 4.1M views - The Black Eyed Peas, Lykke Li, Altégo - MEET ME HALFWAY x I FOLLOW RIVERS (ALTÉGO MIX) [V:0.50 E:0.50 D:0.50 T:120], Bleu Soleil, Luiza - Soleil Bleu [V:0.55 E:0.63 D:0.47 T:147], The Big 80s guys - Sweet Dreams (Are Made of This) [V:0.21 E:0.24 D:0.18 T:118], John Newman - Love Me Again [V:0.56 E:0.64 D:0.48 T:148], aidannn, 1.7M views - the spins x kids (remix by aidannn) [V:0.50 E:0.50 D:0.50 T:120], Calvin Harris - My Way [V:0.51 E:0.58 D:0.44 T:143], Nelly Furtado - Say It Right [V:0.59 E:0.67 D:0.50 T:150], rudo made it, COSKO - Where Have You Been (Orchestra Version) [V:0.37 E:0.42 D:0.32 T:131], Luke Muzzic - Roi (Edit, slowed to perfection) [V:0.34 E:0.39 D:0.29 T:129], Bakermat - Baianá [V:0.51 E:0.58 D:0.43 T:143], YALL, Gabriela Richardson - Hundred Miles [V:0.47 E:0.54 D:0.40 T:140], Daft Punk, Pharrell Williams, Nile Rodgers - Get Lucky (feat. Pharrell Williams and Nile Rodgers) [V:0.56 E:0.64 D:0.48 T:148], The Magician, Inner City - Big Fun [V:0.27 E:0.30 D:0.23 T:122], Indila - Dernière danse [V:0.57 E:0.65 D:0.49 T:148], The Weeknd - Blinding Lights [V:0.64 E:0.73 D:0.55 T:154], Mark Ronson - Nothing Breaks Like a Heart (feat. Miley Cyrus) [V:0.52 E:0.59 D:0.44 T:144], Adele - Rolling in the Deep [V:0.57 E:0.65 D:0.49 T:148], Coldplay - A Sky Full of Stars [V:0.60 E:0.69 D:0.52 T:151], Lykke Li - I Follow Rivers (The Magician Remix) [V:0.46 E:0.53 D:0.40 T:139], Kerchak - Flynt et Mungo [V:0.24 E:0.47 D:0.50 T:120], Ninho, 138M views - Jefe [V:0.50 E:0.50 D:0.50 T:120], Sofiane - Lundi [V:0.39 E:0.64 D:0.63 T:133], Videoclub - Mai [V:0.48 E:0.55 D:0.41 T:141], GAULOIS - Jolie (feat. Ninho) [V:0.41 E:0.66 D:0.65 T:134], Ravyn Lenae - Love Me Not [V:0.60 E:0.68 D:0.51 T:151], UZI, JKSN - 50G [V:0.41 E:0.66 D:0.65 T:134], disiz, Theodora - melodrama [V:0.60 E:0.68 D:0.51 T:151], Ninho - La vie qu'on mène [V:0.52 E:0.59 D:0.44 T:144], PLK - Nouvelles [V:0.51 E:0.78 D:0.73 T:143], Heuss L'enfoiré - L'enfoiré [V:0.39 E:0.65 D:0.64 T:133], Gazo - CELINE 3X [V:0.39 E:0.64 D:0.63 T:133], Mig - James Gordon [V:0.30 E:0.54 D:0.55 T:125], 1PLIKATION - BATARD 2 [V:0.33 E:0.58 D:0.58 T:128], Mola - Freestyle 2 MI-TEMPS [V:0.27 E:0.51 D:0.53 T:123], Koba LaD - Aventador [V:0.41 E:0.66 D:0.65 T:134], Mig - Oswald Cobblepot [V:0.28 E:0.52 D:0.54 T:124], 2ZG - PAOLA LOCATELLI [V:0.35 E:0.60 D:0.60 T:130], Maes - Dybala (feat. Jul) [V:0.50 E:0.50 D:0.50 T:120], Raplume, Bilouki - Olivia Pope [V:0.37 E:0.62 D:0.61 T:131], La Rvfleuze - Money in the Bank [V:0.48 E:0.74 D:0.71 T:140], Beendo Z - Jordy [V:0.27 E:0.30 D:0.23 T:122], Ninho - Binks to Binks 7 [V:0.41 E:0.66 D:0.65 T:134], JRK 19 - Avenue Porte Brunet 2 [V:0.36 E:0.61 D:0.61 T:130]**
-**Ceci est le reflet direct de l'inconscient et de l'humeur réelle.**
-
-**SIGNAUX MUSICAUX RAPIDES :**
-* **Musique Rapide / Metal / Techno / Hard Rock** → Décharge énergie → **intense** ou **pumped**
-* **Rap / Hip-Hop / Trap** → Confiance en soi, "Boss mode" → **confident**
-* **Électro Lourde / Hardstyle / Drum & Bass** → Énergie max → **pumped** ou **energetic**
-* **Pop / Indie / Rock modéré** → Bonne humeur équilibrée → **energetic** ou **confident**
-* **Lo-Fi / Jazz / Classique** → Besoin concentration → **creative** ou **chill**
-* **Acoustique / Folk / Ballade** → Introspection, nostalgie → **melancholy** ou **tired**
-* **Musique Triste / Lente / Ambient** → Fatigue morale → **melancholy** ou **tired**
-* **Aucune musique** → Faible énergie → **tired** ou **chill**
-
-**TEMPO & PATTERNS :**
-* **BPM >140 (Hardstyle, Techno, DnB)** → **pumped** ou **intense**
-* **BPM 120-140 (Pop, House, Hip-Hop)** → **energetic** ou **confident**
-* **BPM 90-120 (Rock, Indie)** → **creative** ou **energetic**
-* **BPM <90 (Ballade, Jazz, Lo-Fi)** → **chill** ou **tired**
-* **Répétition (>5x même chanson)** → **melancholy** (rumination) ou **pumped** (obsession)
-* **Écoute tôt matin (<9h) + énergique** → **pumped** ou **energetic**
-* **Écoute tard soir (>22h) + calme** → **chill** ou **melancholy**
-
----
-
-### 4. ANALYSE DES CONTRAINTES - MÉTÉO
-**Source : Météo (Meteo Bordeaux: Nuageux (Overcast), Min 7.3C, Max 13.9C.)**
-
-**IMPACT MÉTÉO :**
-* ☀️ **Grand Soleil** → Booste confiance, énergie → **pumped**, **confident**, **energetic**
-* 🌤️ **Nuages légers** → Neutre, suit musique et agenda
-* 🌧️ **Pluie/Grisaille** → Fatigue mentale → **melancholy**, **tired**
-* ⛈️ **Orage** → Tension intense → **intense** ou **melancholy**
-* 🌡️ **Froid <5°C** → Fatigue physique → **tired** ou **chill**
-* 🌡️ **Chaleur >25°C** → Énergie boost → **energetic** ou **pumped**
-
-**SAISON :**
-* **Hiver/Automne** → Tendance **melancholy** ou **chill**
-* **Été** → Tendance **energetic** ou **pumped**
-
----
-
-
-
-### PROTOCOLE DE DÉCISION FINAL (ARBRE STRICT)
-
-**NIVEAU 1 - ACTIVITÉS PHYSIQUES (Priority Override)**
-1. **SPORT INTENSE** (Crossfit, Compétition, HIIT) → **pumped**
-2. **SPORT MODÉRÉ** (Run, Gym) → **energetic**
-
-**NIVEAU 2 - CHARGE MENTALE & AGENDA**
-3. **SURCHARGE** (> 6h) OU **Deadline urgente** → **intense**
-4. **TRAVAIL CRÉATIF** (Design, Dev, Art) → **creative**
-5. **ÉTUDES/FOCUS** (Exam, Projet, Réunion) → **hard_work**
-
-**NIVEAU 3 - SOCIAL**
-6. **ÉVÉNEMENT SOCIAL ACTIF** (Fête, Soirée, Concert) → **confident** (ou **pumped** si musique énergique)
-7. **SOCIAL CALME** (Resto, Café) → **confident**
-
-**NIVEAU 4 - MUSIQUE & MÉTÉO (SI AGENDA LÉGER/VIDE)**
-8. **BPM >140** → **pumped** ou **intense**
-9. **Musique énergique tôt (<9h)** → **pumped** ou **energetic**
-10. **Rap/Hip-Hop + Soleil** → **confident**
-11. **Pop/Indie + Chaleur >25°C** → **energetic**
-12. **BPM <90 OU Musique Lo-Fi** → **creative** ou **chill**
-13. **Répétition + Musique triste** → **melancholy**
-14. **Musique calme tard (>22h)** → **chill** ou **melancholy**
-15. **Musique Triste OU Pluie** → **melancholy**
-16. **Aucune musique OU Froid <5°C OU Pluie** → **tired**
-17. **Hiver + Musique lente** → **melancholy** ou **tired**
-18. **Été + Musique énergique** → **pumped** ou **energetic**
-
-**NIVEAU 5 - JOUR & FATIGUE**
-19. **Lundi + Agenda léger** → **hard_work** ou **tired**
-20. **Vendredi + Social/Musique énergique** → **confident** ou **pumped**
-21. **Dimanche + Vide** → **chill**
-22. **Fin semaine + Surcharge** → **tired** ou **intense**
-
----
-
-### LES 9 MOODS AUTORISÉS :
-
-**Travail & Attitude :**
-* **creative** : Travail créatif, génération d'idées, art/perso
-* **hard_work** : Études, focus intense, examens, réunions sérieuses
-* **confident** : Social actif, attitude fière, "Boss mode"
-
-**Énergie Quotidienne :**
-* **chill** : Repos tranquille, détente, hamac mental
-* **energetic** : Dynamique sain, sport modéré, bonne humeur
-* **melancholy** : Tristesse, nostalgie, pluie intérieure
-
-**Extrêmes :**
-* **intense** : Charge max, deadline, focus extrême
-* **pumped** : Énergie explosive, sport intense, fête, hype
-* **tired** : Épuisement total, fatigue physique/morale
-
----
-
-**TA RÉPONSE : UNIQUEMENT le mot du mood, minuscules, sans explication.**
+### SORTIE ATTENDUE
+Renvoie uniquement l'un des moods autorisés : creative, hard_work, confident, chill, energetic, melancholy, intense, pumped, tired.
+Pas d'explication, juste le mot.

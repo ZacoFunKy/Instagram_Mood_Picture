@@ -617,72 +617,152 @@ Utilise ces données pour **valider** ou **ajuster** la prédiction de la Sectio
     def build_morning_prompt(self, historical_moods: str, calendar_summary: str,
                          weather_summary: str, music_summary: str,
                          preprocessor_analysis: Optional[Dict] = None) -> str:
-        """
-        Builds complete morning execution prompt (3am prediction for full day).
-        
-        NEW STRUCTURE: Pre-analysis FIRST (step-by-step), then raw data, then rules
+        """Morning prompt (3h): new, streamlined layout for clarity."""
 
-        Args:
-            historical_moods: Historical mood patterns
-            calendar_summary: Calendar events
-            weather_summary: Weather forecast
-            music_summary: Music listening history
-            preprocessor_analysis: Optional pre-analysis from MoodDataAnalyzer
+        sleep_dict = self.sleep.to_dict()
 
-        Returns:
-            Complete morning-optimized prompt string
-        """
-        sections = [
-            self.build_objective_section(),
-            # ===== 1. PRÉ-ANALYSE (PRIORITAIRE - POINT DE DÉPART) =====
-            self.build_preprocessor_section(preprocessor_analysis),
-            # ===== 2. DONNÉES BRUTES (POUR VALIDATION) =====
-            self.build_raw_data_header(),
-            self.build_agenda_section_morning(calendar_summary),
-            self.build_sleep_section_morning(music_summary),
-            self.build_weather_section_morning(weather_summary),
-            self.build_hour_section_morning(),
-            # ===== 3. DESCRIPTIONS DES MOODS =====
-            self.MOOD_DESCRIPTIONS,
-            # ===== 4. PROTOCOLE DE DÉCISION =====
-            self.DECISION_PROCESS,
-        ]
-        return "\n".join(sections)
+        def format_preproc(pre: Optional[Dict]) -> str:
+            if not pre:
+                return "Aucune pré-analyse disponible (raisonne à partir des données brutes)."
+            weights = pre.get('source_weights', {})
+            top = pre.get('top_moods', [])
+            weights_str = ", ".join([f"{k}:{int(v*100)}%" for k, v in weights.items()])
+            top_str = " / ".join([f"{m if isinstance(m, str) else m}:{score:.1f}" for m, score in top[:3]])
+            return f"Poids sources: {weights_str}\nTop pré-analyse: {top_str}"
+
+        return f"""
+### RÔLE
+Tu es une IA de mood-triage. Ta sortie est **un seul mot** (mood autorisé) en minuscules.
+
+### CONTEXTE D'EXÉCUTION (MATIN - 3h)
+- Jour / date : {self.temporal.weekday_str} {self.temporal.now.strftime('%d/%m')}
+- Heure locale : {self.temporal.execution_time_str}
+- Portée : Prévision pour aujourd'hui et ce soir.
+- Historique moods : {historical_moods if historical_moods else 'Non fourni'}
+
+### PRÉ-ANALYSE (PRIORITAIRE SI PRÉSENTE)
+{format_preproc(preprocessor_analysis)}
+
+### DONNÉES BRUTES (ne pas inventer)
+- Agenda (aujourd'hui + contexte semaine) :
+{calendar_summary}
+- Sommeil : coucher {sleep_dict['bedtime']} / réveil {sleep_dict['wake_time']} / durée {sleep_dict['sleep_hours']}h
+- Météo : {weather_summary}
+- Musique / historique :
+{music_summary}
+
+### MÉTHODE (RAISONNE EN 4 ÉTAPES)
+1) Agenda d'abord : identifie charge (réunions serrées, livrables, déplacements) et nature (créatif, deep work, social, sport). Charge haute → hard_work/intense; créatif long sans stress → creative; social positif → confident/energetic; sport matinal → pumped/energetic.
+2) Sommeil ensuite : <5h = fatigue forte, 5-7h = légère fatigue, 7-9h = neutre, >9h = repos/chill. Si sommeil très court et agenda chargé → hard_work mais énergie basse (tired si peu de contraintes). Sommeil long + peu d'agenda → chill/creative.
+3) Météo : pluie/froid → réduit énergie (baisse confident/energetic, monte melancholy/tired/chill); soleil/chaleur modérée → monte confident/energetic; chaleur forte peut fatiguer (favorise tired/chill si déjà chargé).
+4) Musique : BPM/énergie/valence. Haute énergie/tempo + valence haute → pumped/energetic/confident. Énergie basse + valence basse → melancholy/tired. Si musique contredit agenda+sommeil, garde agenda+sommeil comme ancre et ajuste seulement si cohérent.
+
+### GUIDE DE SÉLECTION DU MOOD (RÈGLES CONCRÈTES)
+- creative: journée légère, tâches ouvertes/créatives, sommeil ok (≥7h), météo neutre/agréable, musique plutôt inspirante/modérée.
+- hard_work: livrables, réunions serrées, déplacements, beaucoup de tâches exigeantes; sommeil insuffisant n’annule pas, le devoir prime.
+- confident: social positif, présentations, bonnes nouvelles; météo agréable; musique à haute valence et énergie modérée/haute.
+- chill: peu de contraintes, volonté de détente/recovery; sommeil long ou besoin de repos; météo maussade mais sans obligations.
+- energetic: sport prévu, déplacement dynamique, peu de stress; sommeil ok; météo agréable; musique énergique.
+- melancholy: météo et musique basses en valence, introspection; peu de contraintes et sommeil moyen; éviter si obligations fortes.
+- intense: charge critique + stress/urgence; météo/chaleur/orage peuvent accentuer; musique forte peut soutenir.
+- pumped: sport/compétition imminent, musique très énergique; privilégier si activité physique est au centre.
+- tired: <5h ou dette de sommeil marquée, peu de contraintes; si contraintes élevées, reste sur hard_work.
+
+### CAS PARTICULIERS ET CONTRADICTIONS
+- Sommeil très court + social positif: choisis confident si obligations sociales essentielles, sinon tired/chill.
+- Agenda créatif + musique tristounette: reste sur creative si sommeil/météo OK; n’ajuste à melancholy que si absence de contraintes et valence très basse.
+- Sport prévu mais météo très mauvaise: pumped si indoor; sinon energetic/chill selon fatigue.
+- Données manquantes: utilise agenda comme ancre, sommeil comme modérateur, météo/musique comme affinement.
+
+### RÈGLES DE PRIORISATION
+- Si pré-analyse existe : pars du TOP 1 comme baseline et ne le changes que si un signal fort le contredit.
+- Signal critique (deadline, sport intense, <5h de sommeil) > reste.
+- Si signaux contradictoires, privilégie sommeil + agenda, puis ajuste avec météo (modère énergie) et musique (finesse du ton).
+- Si données manquantes, reste prudent :
+    * agenda chargé → hard_work ;
+    * agenda léger → chill ;
+    * social sans info énergie → confident ou chill selon ton météo/musique.
+- Pas de justification dans la sortie : réponds uniquement le mood choisi parmi creative, hard_work, confident, chill, energetic, melancholy, intense, pumped, tired.
+
+### SORTIE ATTENDUE
+Renvoie uniquement l'un des moods autorisés : creative, hard_work, confident, chill, energetic, melancholy, intense, pumped, tired.
+Pas d'explication, juste le mot.
+"""
 
     def build_afternoon_prompt(self, historical_moods: str, calendar_summary: str,
                          weather_summary: str, music_summary: str,
                          preprocessor_analysis: Optional[Dict] = None) -> str:
-        """
-        Builds complete afternoon execution prompt (14h prediction for evening + tomorrow).
-        
-        NEW STRUCTURE: Pre-analysis FIRST (step-by-step), then raw data, then rules
+        """Afternoon prompt (14h): new, streamlined layout for evening + tomorrow morning."""
 
-        Args:
-            historical_moods: Historical mood patterns
-            calendar_summary: Calendar events
-            weather_summary: Weather forecast
-            music_summary: Music listening history
-            preprocessor_analysis: Optional pre-analysis from MoodDataAnalyzer
+        sleep_dict = self.sleep.to_dict()
 
-        Returns:
-            Complete afternoon-optimized prompt string
-        """
-        sections = [
-            self.build_objective_section(),
-            # ===== 1. PRÉ-ANALYSE (PRIORITAIRE - POINT DE DÉPART) =====
-            self.build_preprocessor_section(preprocessor_analysis),
-            # ===== 2. DONNÉES BRUTES (POUR VALIDATION) =====
-            self.build_raw_data_header(),
-            self.build_agenda_section_afternoon(calendar_summary),
-            self.build_sleep_section_afternoon(music_summary),
-            self.build_weather_section_afternoon(weather_summary),
-            self.build_hour_section_afternoon(),
-            # ===== 3. DESCRIPTIONS DES MOODS =====
-            self.MOOD_DESCRIPTIONS,
-            # ===== 4. PROTOCOLE DE DÉCISION =====
-            self.DECISION_PROCESS,
-        ]
-        return "\n".join(sections)
+        def format_preproc(pre: Optional[Dict]) -> str:
+            if not pre:
+                return "Aucune pré-analyse disponible (raisonne à partir des données brutes)."
+            weights = pre.get('source_weights', {})
+            top = pre.get('top_moods', [])
+            weights_str = ", ".join([f"{k}:{int(v*100)}%" for k, v in weights.items()])
+            top_str = " / ".join([f"{m if isinstance(m, str) else m}:{score:.1f}" for m, score in top[:3]])
+            return f"Poids sources: {weights_str}\nTop pré-analyse: {top_str}"
+
+        return f"""
+### RÔLE
+Tu es une IA de mood-triage. Ta sortie est **un seul mot** (mood autorisé) en minuscules.
+
+### CONTEXTE D'EXÉCUTION (APRES-MIDI - 14h)
+- Jour / date : {self.temporal.weekday_str} {self.temporal.now.strftime('%d/%m')}
+- Heure locale : {self.temporal.execution_time_str}
+- Portée : Prévision pour ce soir et demain matin.
+- Historique moods : {historical_moods if historical_moods else 'Non fourni'}
+
+### PRÉ-ANALYSE (PRIORITAIRE SI PRÉSENTE)
+{format_preproc(preprocessor_analysis)}
+
+### DONNÉES BRUTES (ne pas inventer)
+- Agenda (reste de la journée + demain matin) :
+{calendar_summary}
+- Sommeil (nuit dernière) : coucher {sleep_dict['bedtime']} / réveil {sleep_dict['wake_time']} / durée {sleep_dict['sleep_hours']}h
+- Météo : {weather_summary}
+- Musique / historique récent :
+{music_summary}
+
+### MÉTHODE (RAISONNE EN 4 ÉTAPES)
+1) Agenda restant + social prévu ce soir : charge haute (livrable, déplacement, obligations sociales lourdes) → hard_work/intense ; soirée sociale légère/positive → confident/energetic ; sport prévu → pumped/energetic ; soirée calme sans contrainte → chill/creative.
+2) Sommeil de la nuit dernière : <5h = fatigue forte, 5-7h = légère, 7-9h = neutre, >9h = repos/chill. Si sommeil très court + charge ce soir → hard_work mais énergie basse (tired si charge faible). Sommeil bon + soirée libre → chill ou creative.
+3) Météo de la soirée : pluie/froid → réduit énergie et moral (monte melancholy/tired/chill) ; ciel clair/agréable → monte confident/energetic/pumped ; chaleur forte peut fatiguer si déjà chargé.
+4) Musique du jour : énergie/tempo/valence. Haute énergie + valence haute → pumped/energetic/confident. Énergie basse + valence basse → melancholy/tired. Si musique contredit agenda+sommeil, garde agenda+sommeil comme ancre et n'ajuste que légèrement.
+
+### GUIDE DE SÉLECTION DU MOOD (RÈGLES CONCRÈTES)
+- creative: soirée libre, activités créatives, sommeil ok (≥7h), météo neutre/agréable.
+- hard_work: livrables à finir ce soir, obligations fortes; même si fatigue, le devoir prime (tired seulement si charge faible).
+- confident: social positif (amis, présentation), météo agréable; musique haute valence/énergie.
+- chill: soirée de repos sans contrainte; sommeil long ou besoin de récupération; météo maussade.
+- energetic: activité légère et dynamique, sommeil ok, météo agréable; musique énergique.
+- melancholy: faible valence musicale + mauvais temps + peu de contraintes; éviter si obligations.
+- intense: urgence/pression ce soir; musique très énergétique OK; météo extrême peut amplifier.
+- pumped: sport/compétition imminent; priorité si activité physique centrale.
+- tired: <5h ou dette de sommeil; si obligations fortes, bascule vers hard_work.
+
+### CAS PARTICULIERS ET CONTRADICTIONS
+- Fatigue forte + événement social important: confident si impératif, sinon tired/chill.
+- Travail à finir + musique très calme: garde hard_work; musique n’inverse pas l’ancre.
+- Sortie prévue mais météo très mauvaise: energetic si motivation forte, sinon chill/melancholy selon valence.
+- Données manquantes: agenda comme ancre, sommeil modère, météo/musique affinent.
+
+### RÈGLES DE PRIORISATION
+- Si pré-analyse existe : pars du TOP 1 comme baseline et ne le changes que si un signal fort le contredit.
+- Signal critique (deadline ce soir, sport intense, <5h sommeil) > reste.
+- Signaux mixtes : priorité sommeil + agenda, puis météo (modère énergie) et musique (affine le ton).
+- Données manquantes :
+    * soirée chargée → hard_work ;
+    * soirée légère → chill ;
+    * social prévu mais énergie inconnue → confident ou chill selon météo/musique.
+- Pas de justification dans la sortie : réponds uniquement le mood choisi parmi creative, hard_work, confident, chill, energetic, melancholy, intense, pumped, tired.
+
+### SORTIE ATTENDUE
+Renvoie uniquement l'un des moods autorisés : creative, hard_work, confident, chill, energetic, melancholy, intense, pumped, tired.
+Pas d'explication, juste le mot.
+"""
 
 
 # ============================================================================
