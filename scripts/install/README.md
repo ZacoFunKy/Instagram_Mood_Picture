@@ -6,15 +6,22 @@ Quick installation scripts for the Mood app to your Android device.
 
 ### Windows
 ```powershell
-# From project root
+# Standard install (replaces existing)
 .\scripts\install\install-apk.ps1
+
+# Clean install (uninstalls conflicts, then installs)
+.\scripts\install\clean-reinstall.ps1
 ```
 
 ### macOS / Linux
 ```bash
-# From project root
+# Standard install (replaces existing)
 chmod +x ./scripts/install/install-apk.sh
 ./scripts/install/install-apk.sh
+
+# Clean install (uninstalls conflicts, then installs)
+chmod +x ./scripts/install/clean-reinstall.sh
+./scripts/install/clean-reinstall.sh
 ```
 
 ## Prerequisites
@@ -27,8 +34,23 @@ chmod +x ./scripts/install/install-apk.sh
 
 | File | Platform | Usage |
 |------|----------|-------|
-| `install-apk.ps1` | Windows | PowerShell script for Windows users |
-| `install-apk.sh` | macOS/Linux | Bash script for macOS and Linux |
+| `install-apk.ps1` | Windows | PowerShell script - standard install (replaces existing) |
+| `install-apk.sh` | macOS/Linux | Bash script - standard install (replaces existing) |
+| `clean-reinstall.ps1` | Windows | PowerShell script - clean install (removes conflicts first) |
+| `clean-reinstall.sh` | macOS/Linux | Bash script - clean install (removes conflicts first) |
+
+## When to use which
+
+### Use `install-apk.ps1` / `install-apk.sh`
+- App is already installed and working
+- Just updating to a new version
+- User data should be preserved
+
+### Use `clean-reinstall.ps1` / `clean-reinstall.sh`
+- Getting "package conflict" errors
+- First time install after development
+- App won't start or crashes immediately
+- Need to clear all existing app data
 
 ## What These Scripts Do
 

@@ -50,15 +50,26 @@ jobs:
       - name: Add Android Permissions
         run: |
           MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
-          # Insert ACTIVITY_RECOGNITION permission before <application> tag
-          sed -i '/<application/i\    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />' $MANIFEST_PATH
+          # Ensure INTERNET permission exists (required for MongoDB)
+          if ! grep -q "android.permission.INTERNET" $MANIFEST_PATH; then
+            sed -i '/<uses-permission/!b;$a\    <uses-permission android:name="android.permission.INTERNET" />' $MANIFEST_PATH || sed -i '/<application/i\    <uses-permission android:name="android.permission.INTERNET" />' $MANIFEST_PATH
+          fi
+          # Ensure ACTIVITY_RECOGNITION permission exists (required for pedometer)
+          if ! grep -q "android.permission.ACTIVITY_RECOGNITION" $MANIFEST_PATH; then
+            sed -i '/<application/i\    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />' $MANIFEST_PATH
+          fi
           # Change app label to "Mood"
-          sed -i 's/android:label="[^"]*"/android:label="Mood"/' $MANIFEST_PATH
-          echo "✅ Added ACTIVITY_RECOGNITION permission to AndroidManifest.xml"
-          echo "✅ Changed app name to 'Mood'"
+          sed -i 's/android:label="[^"]*"/android:label="Mood"/' $MANIFEST_PATH || true
+          echo "✅ Android permissions configured"
+          echo "📋 AndroidManifest.xml content:"
+          cat $MANIFEST_PATH
 
       - name: Install Dependencies
         run: flutter pub get
+      
+      - name: Clean Build Artifacts
+        run: flutter clean
+
       
       - name: Generate Launcher Icons
         run: |

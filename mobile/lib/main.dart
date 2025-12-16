@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
@@ -582,9 +583,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
 
     try {
-      debugPrint("📡 Connecting to MongoDB...");
+      debugPrint("📡 Connecting to MongoDB with URI: $uri");
       final db = await mongo.Db.create(uri);
-      await db.open();
+      
+      // Add timeout to open connection
+      await db.open().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw TimeoutException('MongoDB connection timeout after 10 seconds');
+        },
+      );
       debugPrint("✅ Connected to MongoDB");
 
       // Use standard ISO date query if needed, but here simple find is enough
@@ -621,8 +629,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
           _isLoading = false;
         });
       db.close();
+    } on TimeoutException catch (e) {
+      debugPrint("⏱️ TIMEOUT: Connection took too long - $e");
+      debugPrint("💡 Possible fixes: Check internet, increase timeout, verify MongoDB URI");
+      if (mounted) setState(() => _isLoading = false);
+    } on SocketException catch (e) {
+      debugPrint("🌐 SOCKET/NETWORK ERROR: $e");
+      debugPrint("💡 Possible causes: No internet, DNS resolution failed, firewall blocked");
+      if (mounted) setState(() => _isLoading = false);
+    } on FormatException catch (e) {
+      debugPrint("📝 FORMAT ERROR: Invalid MongoDB URI or response format - $e");
+      if (mounted) setState(() => _isLoading = false);
     } catch (e, stackTrace) {
-      debugPrint("❌ Error fetching history: $e");
+      debugPrint("❌ Error fetching history: ${e.runtimeType} - $e");
       debugPrint("Stack trace: $stackTrace");
       if (mounted) setState(() => _isLoading = false);
     }
@@ -740,21 +759,41 @@ class _StatsScreenState extends State<StatsScreen> {
   Future<void> _fetchStats() async {
     final String? mainUri = dotenv.env['MONGO_URI'];
     final String? mobileUri = dotenv.env['MONGO_URI_MOBILE'];
-    if (mainUri == null || mobileUri == null) return;
+    
+    debugPrint("📊 StatsScreen init - mainUri: ${mainUri != null ? 'SET' : 'NULL'}, mobileUri: ${mobileUri != null ? 'SET' : 'NULL'}");
+    
+    if (mainUri == null || mobileUri == null) {
+      debugPrint("❌ Missing MongoDB URIs");
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
 
     try {
-      final db = await mongo.Db.create(mainUri);
+      debugPrint("📡 Connecting to main MongoDB for daily_logs...");
+      final db = await mongo.Db.create(mainUri).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw TimeoutException('Main DB timeout'),
+      );
       await db.open();
+      debugPrint("✅ Connected to main DB");
 
       final logsColl = db.collection('daily_logs');
       final logs = await logsColl.find(mongo.where.limit(100)).toList();
+      debugPrint("📊 Found ${logs.length} daily logs");
 
-      final dbMobile = await mongo.Db.create(mobileUri);
+      debugPrint("📡 Connecting to mobile MongoDB for overrides...");
+      final dbMobile = await mongo.Db.create(mobileUri).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw TimeoutException('Mobile DB timeout'),
+      );
       await dbMobile.open();
+      debugPrint("✅ Connected to mobile DB");
+      
       final overridesColl = dbMobile.collection('overrides');
       final overrides = await overridesColl
           .find(mongo.where.sortBy('date', descending: true).limit(7))
           .toList();
+      debugPrint("📊 Found ${overrides.length} overrides");
 
       Map<String, int> moodCounts = {};
       for (var log in logs) {
@@ -808,7 +847,17 @@ class _StatsScreenState extends State<StatsScreen> {
         });
       db.close();
       dbMobile.close();
-    } catch (e) {
+    } on TimeoutException catch (e) {
+      debugPrint("⏱️ STATS TIMEOUT: $e");
+      debugPrint("💡 Possible fixes: Check internet, increase timeout");
+      if (mounted) setState(() => _isLoading = false);
+    } on SocketException catch (e) {
+      debugPrint("🌐 STATS NETWORK ERROR: $e");
+      debugPrint("💡 Check: Internet connection, DNS resolution, firewall");
+      if (mounted) setState(() => _isLoading = false);
+    } catch (e, stackTrace) {
+      debugPrint("❌ Error fetching stats: ${e.runtimeType} - $e");
+      debugPrint("Stack trace: $stackTrace");
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -889,16 +938,6 @@ class _StatsScreenState extends State<StatsScreen> {
                           ),
                         ),
                         const SizedBox(height: 40),
-                        Center(
-                          child: Text(
-                            "STEP COUNTING AVAILABLE SOON via Pedometer Integration",
-                            style: GoogleFonts.inter(
-                                color: Colors.white24,
-                                fontSize: 10,
-                                letterSpacing: 1.5),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
                       ],
                     ),
             ],

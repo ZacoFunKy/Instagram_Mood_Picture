@@ -1,0 +1,10 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- REQUIRED: Internet permission for MongoDB connectivity -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    
+    <!-- Activity recognition for pedometer -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    
+    <!-- Network connectivity check -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+</manifest>
