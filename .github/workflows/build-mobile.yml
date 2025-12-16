@@ -60,19 +60,13 @@ jobs:
       - name: Add Android Permissions
         run: |
           MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
-          # Ensure INTERNET permission exists (required for MongoDB)
-          if ! grep -q "android.permission.INTERNET" $MANIFEST_PATH; then
-            sed -i '/<uses-permission/!b;$a\    <uses-permission android:name="android.permission.INTERNET" />' $MANIFEST_PATH || sed -i '/<application/i\    <uses-permission android:name="android.permission.INTERNET" />' $MANIFEST_PATH
+          # Ensure manifest exists (we ship one in repo)
+          if [ ! -f "$MANIFEST_PATH" ]; then
+            echo "❌ AndroidManifest.xml missing"; exit 1;
           fi
-          # Ensure ACTIVITY_RECOGNITION permission exists (required for pedometer)
-          if ! grep -q "android.permission.ACTIVITY_RECOGNITION" $MANIFEST_PATH; then
-            sed -i '/<application/i\    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />' $MANIFEST_PATH
-          fi
-          # Change app label to "Mood"
-          sed -i 's/android:label="[^"]*"/android:label="Mood"/' $MANIFEST_PATH || true
-          echo "✅ Android permissions configured"
           echo "📋 AndroidManifest.xml content:"
-          cat $MANIFEST_PATH
+          sed -n '1,120p' $MANIFEST_PATH
+          echo "✅ Using repo-provided manifest with Flutter v2 embedding"
 
       - name: Install Dependencies
         run: flutter pub get
@@ -98,11 +92,13 @@ jobs:
         run: |
           echo "📋 Checking Android build configuration..."
           echo "🔍 build.gradle (app):"
-          head -40 android/app/build.gradle | grep -E "namespace|compileSdkVersion|targetSdkVersion" || echo "⚠️ Missing expected properties"
+          head -80 android/app/build.gradle | grep -E "namespace|compileSdkVersion|targetSdkVersion" || echo "⚠️ Missing expected properties"
           echo "🔍 gradle.properties:"
           grep -E "useAndroidX|enableJetifier" android/gradle.properties || echo "⚠️ Missing properties"
           echo "🔍 AndroidManifest.xml:"
+          grep "flutterEmbedding\" value\=\"2" -n android/app/src/main/AndroidManifest.xml && echo "✅ Flutter v2 embedding declared" || echo "⚠️ Missing flutterEmbedding=2 metadata"
           grep "INTERNET" android/app/src/main/AndroidManifest.xml && echo "✅ INTERNET permission found" || echo "⚠️ INTERNET permission missing"
+          test -f android/app/src/main/kotlin/com/example/mood_predictor_app/MainActivity.kt && echo "✅ MainActivity.kt exists" || { echo "❌ MainActivity.kt missing"; exit 1; }
 
       - name: Build APK (Release)
         run: |
