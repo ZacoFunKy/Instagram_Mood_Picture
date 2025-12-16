@@ -39,22 +39,23 @@ jobs:
 
       - name: Create .env config
         run: |
-          echo "MONGO_URI=${{ secrets.MONGODB_URI }}" > mobile/.env
-          echo "MONGO_URI_MOBILE=${{ secrets.MONGO_URI_MOBILE }}" >> mobile/.env
-          echo "COLLECTION_NAME=overrides" >> mobile/.env
-          echo "✅ .env created in mobile/ directory"
-          cat mobile/.env
+          echo "MONGO_URI=${{ secrets.MONGODB_URI }}" > .env
+          echo "MONGO_URI_MOBILE=${{ secrets.MONGO_URI_MOBILE }}" >> .env
+          echo "COLLECTION_NAME=overrides" >> .env
+          echo "✅ .env created in working directory (mobile/)"
+          cat .env
         # Note: MONGO_URI for history (daily_logs), MONGO_URI_MOBILE for overrides
 
       - name: Setup Android Local Properties
         run: |
           # Create local.properties for Android build
-          echo "sdk.dir=$ANDROID_HOME" > mobile/android/local.properties
-          echo "flutter.sdk=$FLUTTER_HOME" >> mobile/android/local.properties
-          echo "flutter.versionCode=1" >> mobile/android/local.properties
-          echo "flutter.versionName=1.0.0" >> mobile/android/local.properties
+          mkdir -p android
+          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+          echo "flutter.sdk=$FLUTTER_HOME" >> android/local.properties
+          echo "flutter.versionCode=1" >> android/local.properties
+          echo "flutter.versionName=1.0.0" >> android/local.properties
           echo "✅ Android local.properties configured"
-          cat mobile/android/local.properties
+          cat android/local.properties
 
       - name: Add Android Permissions
         run: |
@@ -97,28 +98,25 @@ jobs:
         run: |
           echo "📋 Checking Android build configuration..."
           echo "🔍 build.gradle (app):"
-          head -20 mobile/android/app/build.gradle | grep -E "namespace|compileSdkVersion|targetSdkVersion" || echo "⚠️ Missing expected properties"
+          head -40 android/app/build.gradle | grep -E "namespace|compileSdkVersion|targetSdkVersion" || echo "⚠️ Missing expected properties"
           echo "🔍 gradle.properties:"
-          grep -E "useAndroidX|enableJetifier" mobile/android/gradle.properties || echo "⚠️ Missing properties"
+          grep -E "useAndroidX|enableJetifier" android/gradle.properties || echo "⚠️ Missing properties"
           echo "🔍 AndroidManifest.xml:"
-          grep "INTERNET" mobile/android/app/src/main/AndroidManifest.xml && echo "✅ INTERNET permission found" || echo "⚠️ INTERNET permission missing"
+          grep "INTERNET" android/app/src/main/AndroidManifest.xml && echo "✅ INTERNET permission found" || echo "⚠️ INTERNET permission missing"
 
       - name: Build APK (Release)
         run: |
-          cd mobile
           flutter build apk --release --no-tree-shake-icons 2>&1 | tee build.log
         
       - name: Check Build Status
         run: |
-          if [ -f "mobile/build/app/outputs/flutter-apk/app-release.apk" ]; then
+          if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
             echo "✅ APK built successfully"
-            ls -lh mobile/build/app/outputs/flutter-apk/app-release.apk
+            ls -lh build/app/outputs/flutter-apk/app-release.apk
           else
             echo "❌ APK build failed"
-            if [ -f "mobile/build.log" ]; then
-              echo "📋 Last 100 lines of build log:"
-              tail -100 mobile/build.log
-            fi
+            echo "📋 Last 150 lines of build log:"
+            tail -150 build.log || true
             exit 1
           fi
 
