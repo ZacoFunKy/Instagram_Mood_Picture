@@ -433,20 +433,35 @@ def main() -> None:
     weather_summary = get_weather_summary()
     
     # Check for Mobile Overrides
+    feedback_metrics = None
+    manual_sleep = None
+    steps_count = None
+
     try:
         current_date_str = now_dt.strftime("%Y-%m-%d")
         overrides = mongo_client.get_daily_override(current_date_str)
-        manual_mood = overrides.get("mood_manual")
-        if manual_mood:
-            logger.info(f"!!! MANUAL MOOD DETECTED: {manual_mood} !!!")
         
+        # 1. Extract Sleep Override (Hard Data)
         manual_sleep = overrides.get("sleep_hours")
         if manual_sleep:
-            logger.info(f"!!! MANUAL SLEEP DETECTED: {manual_sleep}h !!!")
+            logger.info(f"!!! MANUAL SLEEP REPORT: {manual_sleep}h !!!")
+            
+        # 2. Extract Feedback Metrics (Soft Data for AI)
+        if "feedback_energy" in overrides:
+            feedback_metrics = {
+                "energy": float(overrides.get("feedback_energy", 0.5)),
+                "stress": float(overrides.get("feedback_stress", 0.5)),
+                "social": float(overrides.get("feedback_social", 0.5))
+            }
+            logger.info(f"!!! USER FEEDBACK RECEIVED: {feedback_metrics} !!!")
+        
+        # 3. Extract Step Count (Physical Activity Data)
+        steps_count = overrides.get("steps_count")
+        if steps_count:
+            logger.info(f"!!! STEP COUNT: {steps_count} steps !!!")
+
     except Exception as override_error:
-        logger.warning(f"Failed to check overrides: {override_error}")
-        manual_mood = None
-        manual_sleep = None
+        logger.warning(f"Failed to check mobile feedback: {override_error}")
 
     try:
         music_summary, sleep_info, music_metrics = get_music_summary_for_window(
@@ -485,9 +500,6 @@ def main() -> None:
 
     if args.no_ai:
         logger.info("Skipping AI prediction (--no-ai). Using default: 'energetic'")
-    elif manual_mood:
-        logger.info(f"Skipping AI prediction (Manual Override). Using: '{manual_mood}'")
-        mood = manual_mood
     else:
         try:
             calendar_events = calendar_client.get_calendar_events_structured()
@@ -500,7 +512,9 @@ def main() -> None:
                 sleep_info=sleep_info,
                 dry_run=args.dry_run,
                 music_metrics=music_metrics,
-                calendar_events=calendar_events
+                calendar_events=calendar_events,
+                feedback_metrics=feedback_metrics,  # Pass user feedback
+                steps_count=steps_count  # NEW: Pass step count
             )
 
             if isinstance(result, dict) and args.dry_run:

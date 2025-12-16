@@ -164,9 +164,64 @@ Voici une pré-analyse basée sur des règles mathématiques strictes (Veto Somm
     - Si tu détectes une nuance subtile que l'algo a ratée (ex: Adrénaline positive malgré fatigue) -> Tu as le droit d'ajuster.
 """
 
+    def _build_feedback_section(self, feedback: Optional[Dict[str, float]]) -> str:
+        """Constructs the User Feedback section if data exists."""
+        if not feedback:
+            return ""
+        
+        energy = int(feedback.get('energy', 0.5) * 100)
+        stress = int(feedback.get('stress', 0.5) * 100)
+        social = int(feedback.get('social', 0.5) * 100)
+        
+        return f"""
+### 00. FEEDBACK UTILISATEUR (PRIORITÉ ABSOLUE)
+L'utilisateur a donné son ressenti en temps réel via l'app mobile.
+CES DONNÉES SONT LA VÉRITÉ TERRAIN. Utilise-les pour moduler l'analyse.
+
+- **ÉNERGIE PHYSIQUE : {energy}%** (0=À plat, 100=En forme)
+- **STRESS MENTAL : {stress}%** (0=Zen, 100=Explosion)
+- **BATTERIE SOCIALE : {social}%** (0=Loup solitaire, 100=Besoin de foule)
+
+**INSTRUCTION :** 
+- Si Stress > 80% -> Forte chance de **intense** ou **tired**.
+- Si Énergie > 80% -> Forte chance de **pumped**, **energetic** ou **confident**.
+- Si Social > 80% -> Cherche **confident** ou **pumped**.
+- Si Social < 20% -> Cherche **chill**, **creative** ou **tired**.
+"""
+
+    def _build_steps_section(self, steps_count: Optional[int]) -> str:
+        """Constructs the Step Count section if data exists."""
+        if not steps_count or steps_count < 200:
+            # Ignore if no data or too low (user just woke up / hasn't synced yet)
+            return ""
+        
+        # Categorize activity level
+        if steps_count >= 10000:
+            activity_level = "TRÈS ACTIF (Objectif atteint)"
+            mood_hint = "Forte chance de **energetic**, **pumped** ou **confident**."
+        elif steps_count >= 5000:
+            activity_level = "ACTIF (Modéré)"
+            mood_hint = "Penche vers **energetic** ou **chill**."
+        else:
+            activity_level = "SÉDENTAIRE (Peu de mouvement)"
+            mood_hint = "Peut indiquer **tired**, **chill** ou **creative** (journée calme)."
+        
+        return f"""
+### 00B. ACTIVITÉ PHYSIQUE (COMPTEUR DE PAS)
+L'utilisateur a effectué **{steps_count:,} pas** aujourd'hui.
+**NIVEAU D'ACTIVITÉ : {activity_level}**
+
+**INSTRUCTION :** 
+- {mood_hint}
+- Combine cette donnée avec le niveau d'Énergie du Feedback pour affiner.
+"""
+
+
     def build_morning_prompt(self, historical_moods: str, calendar_summary: str,
                              weather_summary: str, music_summary: str,
-                             preprocessor_analysis: Optional[Dict[str, Any]] = None) -> str:
+                             preprocessor_analysis: Optional[Dict[str, Any]] = None,
+                             feedback: Optional[Dict[str, float]] = None,
+                             steps_count: Optional[int] = None) -> str:
         """
         Génère le prompt pour le MATIN (3h).
         LOGIQUE : "CAPITAL DE DÉPART"
@@ -183,6 +238,8 @@ Voici une pré-analyse basée sur des règles mathématiques strictes (Veto Somm
 
         # Pre-processor section
         algo_section = self.build_preprocessor_section(preprocessor_analysis)
+        feedback_section = self._build_feedback_section(feedback)
+        steps_section = self._build_steps_section(steps_count)
 
         prompt = f"""
 ### RÔLE
@@ -192,6 +249,8 @@ Ta réponse doit être **UN SEUL MOT** parmi la liste autorisée.
 ### LISTE DES MOODS AUTORISÉS (Respect strict)
 - creative, hard_work, confident, chill, energetic, melancholy, intense, pumped, tired.
 
+{feedback_section}
+{steps_section}
 {algo_section}
 
 ### 1. CONTEXTE TEMPOREL (MATIN - DÉPART)
@@ -243,7 +302,9 @@ Ta réponse doit être **UN SEUL MOT** parmi la liste autorisée.
 
     def build_afternoon_prompt(self, historical_moods: str, calendar_summary: str,
                                weather_summary: str, music_summary: str,
-                               preprocessor_analysis: Optional[Dict[str, Any]] = None) -> str:
+                               preprocessor_analysis: Optional[Dict[str, Any]] = None,
+                               feedback: Optional[Dict[str, float]] = None,
+                               steps_count: Optional[int] = None) -> str:
         """
         Génère le prompt pour l'APRÈS-MIDI (14h).
         LOGIQUE : "DETTE & CRASH"
@@ -258,6 +319,8 @@ Ta réponse doit être **UN SEUL MOT** parmi la liste autorisée.
 
         # Pre-processor section
         algo_section = self.build_preprocessor_section(preprocessor_analysis)
+        feedback_section = self._build_feedback_section(feedback)
+        steps_section = self._build_steps_section(steps_count)
 
         prompt = f"""
 ### RÔLE
@@ -267,6 +330,8 @@ Ta réponse doit être **UN SEUL MOT** parmi la liste autorisée.
 ### LISTE DES MOODS AUTORISÉS
 - creative, hard_work, confident, chill, energetic, melancholy, intense, pumped, tired.
 
+{feedback_section}
+{steps_section}
 {algo_section}
 
 ### 1. CONTEXTE TEMPOREL (APRÈS-MIDI - BILAN)
@@ -314,7 +379,9 @@ Ta réponse doit être **UN SEUL MOT** parmi la liste autorisée.
 
     def build_evening_prompt(self, historical_moods: str, calendar_summary: str,
                              weather_summary: str, music_summary: str,
-                             preprocessor_analysis: Optional[Dict[str, Any]] = None) -> str:
+                             preprocessor_analysis: Optional[Dict[str, Any]] = None,
+                             feedback: Optional[Dict[str, float]] = None,
+                             steps_count: Optional[int] = None) -> str:
         """
         Génère le prompt pour la SOIRÉE (18h+).
         LOGIQUE : "WIND DOWN vs NIGHT LIFE"
@@ -328,6 +395,8 @@ Ta réponse doit être **UN SEUL MOT** parmi la liste autorisée.
             sleep_status = "OK."
 
         algo_section = self.build_preprocessor_section(preprocessor_analysis)
+        feedback_section = self._build_feedback_section(feedback)
+        steps_section = self._build_steps_section(steps_count)
 
         prompt = f"""
 ### RÔLE
@@ -337,6 +406,8 @@ Ta réponse doit être **UN SEUL MOT** parmi la liste autorisée.
 ### LISTE DES MOODS AUTORISÉS
 - creative, hard_work, confident, chill, energetic, melancholy, intense, pumped, tired.
 
+{feedback_section}
+{steps_section}
 {algo_section}
 
 ### 1. CONTEXTE TEMPOREL (SOIRÉE - WIND DOWN)
@@ -387,7 +458,9 @@ def construct_prompt(
     weather_summary: str,
     sleep_info: Optional[Dict[str, Any]] = None,
     execution_time: Optional[datetime] = None,
-    preprocessor_analysis: Optional[Dict[str, Any]] = None
+    preprocessor_analysis: Optional[Dict[str, Any]] = None,
+    feedback_metrics: Optional[Dict[str, float]] = None,
+    steps_count: Optional[int] = None
 ) -> str:
     """
     Constructs the mood prediction prompt using the appropriate builder strategy.
@@ -419,17 +492,17 @@ def construct_prompt(
     if temporal_context.execution_type == ExecutionType.MATIN:
         return builder.build_morning_prompt(
             historical_moods, calendar_summary, weather_summary, music_summary,
-            preprocessor_analysis
+            preprocessor_analysis, feedback_metrics, steps_count
         )
     elif temporal_context.execution_type == ExecutionType.APRES_MIDI:
         return builder.build_afternoon_prompt(
             historical_moods, calendar_summary, weather_summary, music_summary,
-            preprocessor_analysis
+            preprocessor_analysis, feedback_metrics, steps_count
         )
     else:
         return builder.build_evening_prompt(
             historical_moods, calendar_summary, weather_summary, music_summary,
-            preprocessor_analysis
+            preprocessor_analysis, feedback_metrics, steps_count
         )
 
 
@@ -458,7 +531,9 @@ def predict_mood(
     sleep_info: Optional[Dict[str, Any]] = None,
     dry_run: bool = False,
     music_metrics: Optional[Dict[str, Any]] = None,
-    calendar_events: Optional[List[Dict[str, Any]]] = None
+    calendar_events: Optional[List[Dict[str, Any]]] = None,
+    feedback_metrics: Optional[Dict[str, float]] = None,
+    steps_count: Optional[int] = None
 ) -> Union[str, Dict[str, str]]:
     """
     Main entry point for mood prediction.
@@ -509,7 +584,9 @@ def predict_mood(
     # 2. Construct Prompt (Hybrid)
     prompt = construct_prompt(
         historical_moods, music_summary, calendar_summary, weather_summary, 
-        sleep_info, execution_time=datetime.now(), preprocessor_analysis=preprocessor_analysis
+        sleep_info, execution_time=datetime.now(), preprocessor_analysis=preprocessor_analysis,
+        feedback_metrics=feedback_metrics,
+        steps_count=steps_count
     )
 
     # 3. Handle Dry Run

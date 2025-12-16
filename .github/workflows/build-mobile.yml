@@ -40,8 +40,27 @@ jobs:
       - name: Generate Android Project
         run: flutter create .
 
+      - name: Add Android Permissions
+        run: |
+          MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
+          # Insert ACTIVITY_RECOGNITION permission before <application> tag
+          sed -i '/<application/i\    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />' $MANIFEST_PATH
+          # Change app label to "Mood"
+          sed -i 's/android:label="[^"]*"/android:label="Mood"/' $MANIFEST_PATH
+          echo "✅ Added ACTIVITY_RECOGNITION permission to AndroidManifest.xml"
+          echo "✅ Changed app name to 'Mood'"
+
       - name: Install Dependencies
         run: flutter pub get
+      
+      - name: Generate Launcher Icons
+        run: |
+          if [ -f "assets/icon.png" ]; then
+            flutter pub run flutter_launcher_icons
+            echo "✅ Generated launcher icons from assets/icon.png"
+          else
+            echo "⚠️ Warning: assets/icon.png not found, skipping icon generation"
+          fi
 
       - name: Build APK
         run: flutter build apk --release --no-tree-shake-icons
@@ -49,6 +68,6 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mood-predictor-release
+          name: mood-release
           path: mobile/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 5

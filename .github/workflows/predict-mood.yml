@@ -56,6 +56,13 @@ jobs:
           echo "$YTMUSIC_AUTH_JSON" > browser_auth.json
           # Create log dir just in case
           mkdir -p logs
+      
+      - name: Check Mobile Sync Freshness
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+        run: |
+          echo "🔍 Checking if mobile app has synced recently..."
+          python src/utils/check_mobile_sync.py
 
       - name: Run Mood Prediction
         env:
