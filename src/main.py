@@ -431,12 +431,35 @@ def main() -> None:
     historical_moods = fetch_historical_moods(weekday, current_exec_type, args.dry_run)
     calendar_summary = get_calendar_summary()
     weather_summary = get_weather_summary()
+    
+    # Check for Mobile Overrides
+    try:
+        current_date_str = now_dt.strftime("%Y-%m-%d")
+        overrides = mongo_client.get_daily_override(current_date_str)
+        manual_mood = overrides.get("mood_manual")
+        if manual_mood:
+            logger.info(f"!!! MANUAL MOOD DETECTED: {manual_mood} !!!")
+        
+        manual_sleep = overrides.get("sleep_hours")
+        if manual_sleep:
+            logger.info(f"!!! MANUAL SLEEP DETECTED: {manual_sleep}h !!!")
+    except Exception as override_error:
+        logger.warning(f"Failed to check overrides: {override_error}")
+        manual_mood = None
+        manual_sleep = None
 
     try:
         music_summary, sleep_info, music_metrics = get_music_summary_for_window(
             run_hour=3,
             calendar_summary=calendar_summary
         )
+        
+        # Apply Sleep Override
+        if manual_sleep is not None:
+             sleep_info["sleep_hours"] = float(manual_sleep)
+             sleep_info["status"] = "MANUAL_OVERRIDE" 
+             logger.info(f"Sleep info overridden by App: {manual_sleep}h")
+             
     except Exception as music_error:
         logger.error(f"Music collection failed: {music_error}")
         music_summary = "Error fetching music data"
@@ -462,6 +485,9 @@ def main() -> None:
 
     if args.no_ai:
         logger.info("Skipping AI prediction (--no-ai). Using default: 'energetic'")
+    elif manual_mood:
+        logger.info(f"Skipping AI prediction (Manual Override). Using: '{manual_mood}'")
+        mood = manual_mood
     else:
         try:
             calendar_events = calendar_client.get_calendar_events_structured()

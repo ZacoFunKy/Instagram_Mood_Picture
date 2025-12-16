@@ -1,0 +1,51 @@
+name: Build Mobile App
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'mobile/**'
+  workflow_dispatch:
+
+jobs:
+  build_apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./mobile
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Create .env config
+        run: |
+          echo "MONGO_URI=${{ secrets.MONGO_URI_MOBILE }}" > .env
+          echo "COLLECTION_NAME=overrides" >> .env
+        # Note: We reuse MONGO_URI if generic, or user can add MONGO_URI_MOBILE
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release --no-tree-shake-icons
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mood-predictor-release
+          path: mobile/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 5

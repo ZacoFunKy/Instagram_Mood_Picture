@@ -275,6 +275,24 @@ class DailyLogManager:
             logger.warning(f"Log cleanup failed: {e}")
             return 0
 
+    @staticmethod
+    def get_daily_override(db: pymongo.database.Database,
+                          date_str: str) -> Dict[str, Any]:
+        """
+        Retrieves manual overrides (sleep, mood) for a specific date.
+        Collection: 'overrides'
+        """
+        try:
+            collection = db['overrides']
+            override = collection.find_one({"date": date_str})
+            if override:
+                logger.info(f"[OK] Found manual override for {date_str}: {override}")
+                return override
+            return {}
+        except Exception as e:
+            logger.warning(f"Failed to fetch overrides: {e}")
+            return {}
+
 
 # ============================================================================
 # PUBLIC API
@@ -366,3 +384,19 @@ def clean_old_logs(collection: pymongo.collection.Collection) -> None:
     """
     manager = DailyLogManager()
     manager.clean_old_logs(collection)
+
+
+def get_daily_override(date_str: str) -> Dict[str, Any]:
+    """
+    Retrieves manual overrides for a date.
+
+    Args:
+        date_str: Date string YYYY-MM-DD.
+    """
+    try:
+        db = get_database()
+        manager = DailyLogManager()
+        return manager.get_daily_override(db, date_str)
+    except Exception as e:
+        logger.warning(f"Override fetch failed: {e}")
+        return {}
