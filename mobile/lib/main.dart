@@ -9,6 +9,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:pedometer/pedometer.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -126,8 +127,8 @@ class _InputScreenState extends State<InputScreen> {
 
   // Step Counting
   int _stepCount = 0;
-    int _stepCountAtMidnight = 0;  // Reference point for today's count
-    StreamSubscription<StepCount>? _stepCountStream;
+  int _stepCountAtMidnight = 0; // Reference point for today's count
+  StreamSubscription<StepCount>? _stepCountStream;
   Timer? _autoSyncTimer;
   Timer? _stepRefreshTimer;
 
@@ -136,7 +137,7 @@ class _InputScreenState extends State<InputScreen> {
     super.initState();
     _initPedometer();
     _startAutoSync();
-      _startStepRefresh();
+    _startStepRefresh();
   }
 
   @override
@@ -148,24 +149,31 @@ class _InputScreenState extends State<InputScreen> {
   }
 
   void _startStepRefresh() {
-      // Refresh step count tracking every minute
-      // Check if we've crossed midnight and reset counter
-    _stepRefreshTimer = Timer.periodic(const Duration(minutes: 1), (timer) async {
-        _checkMidnightReset();
+    // Check for midnight reset every minute
+    _stepRefreshTimer =
+        Timer.periodic(const Duration(minutes: 1), (timer) async {
+      await _checkMidnightReset();
     });
   }
 
-    void _checkMidnightReset() {
-      // Reset step count at midnight for new day
-      DateTime now = DateTime.now();
-      if (now.hour == 0 && now.minute == 0) {
-        // Update reference point at midnight
-        setState(() {
-          _stepCountAtMidnight = _stepCount;
-        });
-        debugPrint("📅 Step count reset at midnight");
-      }
+  Future<void> _checkMidnightReset() async {
+    // Reset step count at midnight for new day
+    DateTime now = DateTime.now();
+    final today = DateFormat('yyyy-MM-dd').format(now);
+    final prefs = await SharedPreferences.getInstance();
+    final savedDate = prefs.getString('step_date');
+
+    if (savedDate != today) {
+      // New day detected, reset counter
+      debugPrint("📅 New day detected, resetting step counter");
+      setState(() {
+        _stepCountAtMidnight =
+            0; // Will be reinitialized on next pedometer event
+      });
+      await prefs.setString('step_date', today);
+      await prefs.remove('step_midnight');
     }
+  }
 
   void _startAutoSync() {
     // Auto-sync every 2 hours to keep step count fresh
@@ -185,18 +193,44 @@ class _InputScreenState extends State<InputScreen> {
       return;
     }
 
+    // Load saved midnight reference from SharedPreferences ONCE
+    final prefs = await SharedPreferences.getInstance();
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final savedDate = prefs.getString('step_date');
+    final savedMidnight = prefs.getInt('step_midnight') ?? 0;
+
+    // Initialize midnight reference ONCE at startup
+    if (savedDate == today && savedMidnight > 0) {
+      // Same day, restore saved reference
+      _stepCountAtMidnight = savedMidnight;
+      debugPrint(
+          "📅 Step counter restored: midnight=$_stepCountAtMidnight (from saved)");
+    }
+    // If different day or no saved value, it will be initialized on first pedometer event
+
     // Listen for real-time step count updates
     _stepCountStream = Pedometer.stepCountStream.listen(
-      (StepCount event) {
+      (StepCount event) async {
         if (mounted) {
+          // Initialize midnight reference ONLY if not already set
+          if (_stepCountAtMidnight == 0) {
+            _stepCountAtMidnight = event.steps;
+            await prefs.setString('step_date', today);
+            await prefs.setInt('step_midnight', event.steps);
+            debugPrint(
+                "📅 Step counter initialized: midnight=${event.steps} (first time)");
+          }
+
           setState(() {
-              // Calculate today's steps by subtracting midnight reference
-              _stepCount = event.steps - _stepCountAtMidnight;
-              if (_stepCount < 0) {
-                // Handle phone restart (step counter reset)
-                _stepCountAtMidnight = 0;
-                _stepCount = event.steps;
-              }
+            // Calculate today's steps by subtracting midnight reference
+            _stepCount = event.steps - _stepCountAtMidnight;
+            if (_stepCount < 0) {
+              // Handle phone restart (step counter reset)
+              debugPrint("⚠️ Step counter reset detected, reinitializing");
+              _stepCountAtMidnight = event.steps;
+              _stepCount = 0;
+              prefs.setInt('step_midnight', event.steps);
+            }
           });
         }
       },
@@ -537,22 +571,38 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _fetchHistory() async {
-    final String? uri =
-        dotenv.env['MONGO_URI'];
-    if (uri == null) return;
+    final String? uri = dotenv.env['MONGO_URI'];
+    debugPrint(
+        "🔍 Fetching history from MONGO_URI: ${uri != null ? 'SET' : 'NULL'}");
+
+    if (uri == null) {
+      debugPrint("❌ MONGO_URI is null, cannot fetch history");
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
 
     try {
+      debugPrint("📡 Connecting to MongoDB...");
       final db = await mongo.Db.create(uri);
       await db.open();
+      debugPrint("✅ Connected to MongoDB");
+
       // Use standard ISO date query if needed, but here simple find is enough
+      debugPrint("🔎 Querying daily_logs collection...");
       final logs = await db
           .collection('daily_logs')
           .find(mongo.where.sortBy('date', descending: true).limit(30))
           .toList();
 
+      debugPrint("📊 Found ${logs.length} logs");
+
       Map<String, Map<String, String>> grouped = {};
       for (var log in logs) {
-        String d = log['date'];
+        String? d = log['date'];
+        if (d == null) {
+          debugPrint("⚠️ Skipping log with null date: $log");
+          continue;
+        }
         String type = log['execution_type'] ?? 'UNKNOWN';
         String mood = log['mood_selected'] ?? '?';
         if (!grouped.containsKey(d)) grouped[d] = {};
@@ -563,13 +613,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
       grouped.forEach((k, v) => list.add({"date": k, "data": v}));
       list.sort((a, b) => b['date'].compareTo(a['date']));
 
+      debugPrint("✅ Processed ${list.length} days of history");
+
       if (mounted)
         setState(() {
           _history = list;
           _isLoading = false;
         });
       db.close();
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint("❌ Error fetching history: $e");
+      debugPrint("Stack trace: $stackTrace");
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -684,10 +738,8 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   Future<void> _fetchStats() async {
-    final String? mainUri =
-        dotenv.env['MONGO_URI'];
-    final String? mobileUri =
-        dotenv.env['MONGO_URI_MOBILE'];
+    final String? mainUri = dotenv.env['MONGO_URI'];
+    final String? mobileUri = dotenv.env['MONGO_URI_MOBILE'];
     if (mainUri == null || mobileUri == null) return;
 
     try {
