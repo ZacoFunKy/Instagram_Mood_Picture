@@ -37,6 +37,14 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Set Android SDK env
+        run: |
+          # Prefer preinstalled SDK on GitHub runners
+          if [ -d "/usr/local/lib/android/sdk" ]; then
+            echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+            echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          fi
+
       - name: Create .env config
         run: |
           echo "MONGO_URI=${{ secrets.MONGODB_URI }}" > .env
@@ -50,8 +58,14 @@ jobs:
         run: |
           # Create local.properties for Android build
           mkdir -p android
-          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
-          echo "flutter.sdk=$FLUTTER_HOME" >> android/local.properties
+          SDK_DIR=${ANDROID_SDK_ROOT:-$ANDROID_HOME}
+          if [ -z "$SDK_DIR" ]; then
+            if [ -d "/usr/local/lib/android/sdk" ]; then
+              SDK_DIR="/usr/local/lib/android/sdk"
+            fi
+          fi
+          echo "sdk.dir=$SDK_DIR" > android/local.properties
+          echo "flutter.sdk=$FLUTTER_ROOT" >> android/local.properties
           echo "flutter.versionCode=1" >> android/local.properties
           echo "flutter.versionName=1.0.0" >> android/local.properties
           echo "✅ Android local.properties configured"
