@@ -100,7 +100,18 @@ jobs:
           fi
 
       - name: Build APK (Release)
-        run: flutter build apk --release --no-tree-shake-icons
+        run: flutter build apk --release --no-tree-shake-icons 2>&1 | tee build.log
+        
+      - name: Check Build Status
+        run: |
+          if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
+            echo "✅ APK built successfully"
+            ls -lh build/app/outputs/flutter-apk/app-release.apk
+          else
+            echo "❌ APK build failed"
+            tail -50 build.log
+            exit 1
+          fi
 
       - name: Generate Release Tag
         id: tag
