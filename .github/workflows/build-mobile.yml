@@ -5,6 +5,7 @@ on:
     branches: [ "main" ]
     paths:
       - 'mobile/**'
+      - '.github/workflows/build-mobile.yml'
   workflow_dispatch:
 
 jobs:
@@ -18,6 +19,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
       - name: Setup Java
         uses: actions/setup-java@v3
@@ -68,12 +71,67 @@ jobs:
             echo "✅ Generated launcher icons from default image"
           fi
 
-      - name: Build APK
+      - name: Build APK (Release)
         run: flutter build apk --release --no-tree-shake-icons
+
+      - name: Generate Release Tag
+        id: tag
+        run: |
+          TAG="v$(date +%Y.%m.%d)-$(date +%H%M%S)"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "📦 Release Tag: $TAG"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "Mood App Build - ${{ steps.tag.outputs.tag }}"
+          body: |
+            ## 🎉 New Mood App Release
+            
+            **Build Date**: $(date)
+            **Branch**: main
+            
+            ### Installation Instructions
+            
+            #### Option 1: Direct Installation via ADB
+            ```bash
+            adb install -r mobile/build/app/outputs/flutter-apk/app-release.apk
+            ```
+            
+            #### Option 2: Download & Install Manually
+            1. Download `mood-app-release.apk` from this release
+            2. Transfer to your Android phone
+            3. Open file manager and tap the APK
+            4. Follow the installation prompts
+            
+            #### Option 3: Update Existing Installation
+            ```bash
+            adb install -r mood-app-release.apk
+            ```
+            The `-r` flag allows replacement of existing app without uninstalling.
+            
+            ### Features
+            - ✅ Real-time step count tracking
+            - ✅ Mood history (MATIN/MIDI/SOIR)
+            - ✅ Analytics dashboard
+            - ✅ Auto-sync every 2 hours
+            
+            ### Changes
+            - Updated step counting to use daily count
+            - Fixed database connections
+            - Improved icon generation
+          files: |
+            mobile/build/app/outputs/flutter-apk/app-release.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mood-release
+          name: mood-release-${{ steps.tag.outputs.tag }}
           path: mobile/build/app/outputs/flutter-apk/app-release.apk
-          retention-days: 5
+          retention-days: 30
+

@@ -126,7 +126,8 @@ class _InputScreenState extends State<InputScreen> {
 
   // Step Counting
   int _stepCount = 0;
-  StreamSubscription<StepCount>? _stepCountStream;
+    int _stepCountAtMidnight = 0;  // Reference point for today's count
+    StreamSubscription<StepCount>? _stepCountStream;
   Timer? _autoSyncTimer;
   Timer? _stepRefreshTimer;
 
@@ -135,7 +136,7 @@ class _InputScreenState extends State<InputScreen> {
     super.initState();
     _initPedometer();
     _startAutoSync();
-    _startStepRefresh();
+      _startStepRefresh();
   }
 
   @override
@@ -147,20 +148,24 @@ class _InputScreenState extends State<InputScreen> {
   }
 
   void _startStepRefresh() {
-    // Refresh today's step count every minute for real-time updates
+      // Refresh step count tracking every minute
+      // Check if we've crossed midnight and reset counter
     _stepRefreshTimer = Timer.periodic(const Duration(minutes: 1), (timer) async {
-      try {
-        int todaySteps = await Pedometer.todayStepCount();
-        if (mounted) {
-          setState(() {
-            _stepCount = todaySteps;
-          });
-        }
-      } catch (e) {
-        debugPrint("Error refreshing steps: $e");
-      }
+        _checkMidnightReset();
     });
   }
+
+    void _checkMidnightReset() {
+      // Reset step count at midnight for new day
+      DateTime now = DateTime.now();
+      if (now.hour == 0 && now.minute == 0) {
+        // Update reference point at midnight
+        setState(() {
+          _stepCountAtMidnight = _stepCount;
+        });
+        debugPrint("📅 Step count reset at midnight");
+      }
+    }
 
   void _startAutoSync() {
     // Auto-sync every 2 hours to keep step count fresh
@@ -180,27 +185,18 @@ class _InputScreenState extends State<InputScreen> {
       return;
     }
 
-    // Fetch today's step count from health data
-    try {
-      int todaySteps = await Pedometer.todayStepCount();
-      if (mounted) {
-        setState(() {
-          _stepCount = todaySteps;
-        });
-      }
-      debugPrint("📍 Today's steps: $_stepCount");
-    } catch (e) {
-      debugPrint("Error fetching today's steps: $e");
-    }
-
     // Listen for real-time step count updates
     _stepCountStream = Pedometer.stepCountStream.listen(
       (StepCount event) {
-        // For incremental updates, we could track the delta
-        // But todayStepCount() is more reliable for the daily total
         if (mounted) {
           setState(() {
-            _stepCount = event.steps;
+              // Calculate today's steps by subtracting midnight reference
+              _stepCount = event.steps - _stepCountAtMidnight;
+              if (_stepCount < 0) {
+                // Handle phone restart (step counter reset)
+                _stepCountAtMidnight = 0;
+                _stepCount = event.steps;
+              }
           });
         }
       },
