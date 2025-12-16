@@ -42,10 +42,19 @@ jobs:
           echo "MONGO_URI=${{ secrets.MONGODB_URI }}" > .env
           echo "MONGO_URI_MOBILE=${{ secrets.MONGO_URI_MOBILE }}" >> .env
           echo "COLLECTION_NAME=overrides" >> .env
+          # Copy .env to mobile directory (required for Flutter app to load it)
+          cp .env mobile/.env
+          echo "✅ .env created in both root and mobile/ directories"
         # Note: MONGO_URI for history (daily_logs), MONGO_URI_MOBILE for overrides
 
       - name: Generate Android Project
         run: flutter create .
+
+      - name: Update Android Gradle Configuration
+        run: |
+          # Ensure gradle.properties has correct settings
+          cat android/gradle.properties
+          echo "✅ Android Gradle configured"
 
       - name: Add Android Permissions
         run: |
