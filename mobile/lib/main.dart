@@ -503,7 +503,7 @@ class _InputScreenState extends State<InputScreen> {
         children: [
           Row(
             children: [
-              Text("👟", style: const TextStyle(fontSize: 20)),
+              const Text("👟", style: TextStyle(fontSize: 20)),
               const SizedBox(width: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -585,7 +585,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     try {
       debugPrint("📡 Connecting to MongoDB with URI: $uri");
       final db = await mongo.Db.create(uri);
-      
+
       // Add timeout to open connection
       await db.open().timeout(
         const Duration(seconds: 10),
@@ -623,22 +623,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
       debugPrint("✅ Processed ${list.length} days of history");
 
-      if (mounted)
+      if (mounted) {
         setState(() {
           _history = list;
           _isLoading = false;
         });
+      }
       db.close();
     } on TimeoutException catch (e) {
       debugPrint("⏱️ TIMEOUT: Connection took too long - $e");
-      debugPrint("💡 Possible fixes: Check internet, increase timeout, verify MongoDB URI");
+      debugPrint(
+          "💡 Possible fixes: Check internet, increase timeout, verify MongoDB URI");
       if (mounted) setState(() => _isLoading = false);
     } on SocketException catch (e) {
       debugPrint("🌐 SOCKET/NETWORK ERROR: $e");
-      debugPrint("💡 Possible causes: No internet, DNS resolution failed, firewall blocked");
+      debugPrint(
+          "💡 Possible causes: No internet, DNS resolution failed, firewall blocked");
       if (mounted) setState(() => _isLoading = false);
     } on FormatException catch (e) {
-      debugPrint("📝 FORMAT ERROR: Invalid MongoDB URI or response format - $e");
+      debugPrint(
+          "📝 FORMAT ERROR: Invalid MongoDB URI or response format - $e");
       if (mounted) setState(() => _isLoading = false);
     } catch (e, stackTrace) {
       debugPrint("❌ Error fetching history: ${e.runtimeType} - $e");
@@ -759,9 +763,10 @@ class _StatsScreenState extends State<StatsScreen> {
   Future<void> _fetchStats() async {
     final String? mainUri = dotenv.env['MONGO_URI'];
     final String? mobileUri = dotenv.env['MONGO_URI_MOBILE'];
-    
-    debugPrint("📊 StatsScreen init - mainUri: ${mainUri != null ? 'SET' : 'NULL'}, mobileUri: ${mobileUri != null ? 'SET' : 'NULL'}");
-    
+
+    debugPrint(
+        "📊 StatsScreen init - mainUri: ${mainUri != null ? 'SET' : 'NULL'}, mobileUri: ${mobileUri != null ? 'SET' : 'NULL'}");
+
     if (mainUri == null || mobileUri == null) {
       debugPrint("❌ Missing MongoDB URIs");
       if (mounted) setState(() => _isLoading = false);
@@ -788,7 +793,7 @@ class _StatsScreenState extends State<StatsScreen> {
       );
       await dbMobile.open();
       debugPrint("✅ Connected to mobile DB");
-      
+
       final overridesColl = dbMobile.collection('overrides');
       final overrides = await overridesColl
           .find(mongo.where.sortBy('date', descending: true).limit(7))
@@ -822,10 +827,12 @@ class _StatsScreenState extends State<StatsScreen> {
         } else {
           sleepTrend.add(0.0);
         }
-        if (o['feedback_energy'] != null)
+        if (o['feedback_energy'] != null) {
           totalEnergy += (o['feedback_energy'] as num).toDouble();
-        if (o['feedback_stress'] != null)
+        }
+        if (o['feedback_stress'] != null) {
           totalStress += (o['feedback_stress'] as num).toDouble();
+        }
         count++;
       }
 
@@ -834,17 +841,18 @@ class _StatsScreenState extends State<StatsScreen> {
       }
       _weeklySleep = sleepTrend.sublist(sleepTrend.length - 7);
 
-      if (mounted)
+      if (mounted) {
         setState(() {
           _topMood = top.toUpperCase();
           _avgSleep =
-              count > 0 ? (totalSleep / count).toStringAsFixed(1) + "h" : "-";
+              count > 0 ? "${(totalSleep / count).toStringAsFixed(1)}h" : "-";
           _avgEnergy =
               count > 0 ? "${((totalEnergy / count) * 100).toInt()}%" : "-";
           _avgStress =
               count > 0 ? "${((totalStress / count) * 100).toInt()}%" : "-";
           _isLoading = false;
         });
+      }
       db.close();
       dbMobile.close();
     } on TimeoutException catch (e) {

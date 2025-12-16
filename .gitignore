@@ -20,3 +20,16 @@ __pycache__/
 # Assets (Commit images, but not temp files if any)
 !assets/
 
+# Flutter/Android build outputs
+mobile/build/
+mobile/android/.gradle/
+mobile/android/build/
+mobile/android/app/build/
+mobile/build/**
+mobile/android/local.properties
+mobile/ios/
+mobile/.dart_tool/
+mobile/flutter_assets/
+mobile/native_assets/
+mobile/native_hooks/
+
