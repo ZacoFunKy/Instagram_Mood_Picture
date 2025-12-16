@@ -128,19 +128,38 @@ class _InputScreenState extends State<InputScreen> {
   int _stepCount = 0;
   StreamSubscription<StepCount>? _stepCountStream;
   Timer? _autoSyncTimer;
+  Timer? _stepRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     _initPedometer();
     _startAutoSync();
+    _startStepRefresh();
   }
 
   @override
   void dispose() {
     _stepCountStream?.cancel();
     _autoSyncTimer?.cancel();
+    _stepRefreshTimer?.cancel();
     super.dispose();
+  }
+
+  void _startStepRefresh() {
+    // Refresh today's step count every minute for real-time updates
+    _stepRefreshTimer = Timer.periodic(const Duration(minutes: 1), (timer) async {
+      try {
+        int todaySteps = await Pedometer.todayStepCount();
+        if (mounted) {
+          setState(() {
+            _stepCount = todaySteps;
+          });
+        }
+      } catch (e) {
+        debugPrint("Error refreshing steps: $e");
+      }
+    });
   }
 
   void _startAutoSync() {
@@ -161,9 +180,24 @@ class _InputScreenState extends State<InputScreen> {
       return;
     }
 
-    // Start listening to step count
+    // Fetch today's step count from health data
+    try {
+      int todaySteps = await Pedometer.todayStepCount();
+      if (mounted) {
+        setState(() {
+          _stepCount = todaySteps;
+        });
+      }
+      debugPrint("📍 Today's steps: $_stepCount");
+    } catch (e) {
+      debugPrint("Error fetching today's steps: $e");
+    }
+
+    // Listen for real-time step count updates
     _stepCountStream = Pedometer.stepCountStream.listen(
       (StepCount event) {
+        // For incremental updates, we could track the delta
+        // But todayStepCount() is more reliable for the daily total
         if (mounted) {
           setState(() {
             _stepCount = event.steps;
@@ -508,7 +542,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Future<void> _fetchHistory() async {
     final String? uri =
-        dotenv.env['MONGO_URI_MOBILE'] ?? dotenv.env['MONGO_URI'];
+        dotenv.env['MONGO_URI'];
     if (uri == null) return;
 
     try {
@@ -654,18 +688,22 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   Future<void> _fetchStats() async {
-    final String? uri =
-        dotenv.env['MONGO_URI_MOBILE'] ?? dotenv.env['MONGO_URI'];
-    if (uri == null) return;
+    final String? mainUri =
+        dotenv.env['MONGO_URI'];
+    final String? mobileUri =
+        dotenv.env['MONGO_URI_MOBILE'];
+    if (mainUri == null || mobileUri == null) return;
 
     try {
-      final db = await mongo.Db.create(uri);
+      final db = await mongo.Db.create(mainUri);
       await db.open();
 
       final logsColl = db.collection('daily_logs');
       final logs = await logsColl.find(mongo.where.limit(100)).toList();
 
-      final overridesColl = db.collection('overrides');
+      final dbMobile = await mongo.Db.create(mobileUri);
+      await dbMobile.open();
+      final overridesColl = dbMobile.collection('overrides');
       final overrides = await overridesColl
           .find(mongo.where.sortBy('date', descending: true).limit(7))
           .toList();
@@ -721,6 +759,7 @@ class _StatsScreenState extends State<StatsScreen> {
           _isLoading = false;
         });
       db.close();
+      dbMobile.close();
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }

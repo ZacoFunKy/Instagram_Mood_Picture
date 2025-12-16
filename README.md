@@ -127,10 +127,15 @@ flutter build apk --release  # Production
 **Configuration mobile** :
 1. Créer `mobile/.env` :
    ```env
-   MONGO_URI=mongodb+srv://...
+   MONGO_URI=mongodb+srv://...              # Base de données principale (daily_logs)
+   MONGO_URI_MOBILE=mongodb+srv://...       # Base de données mobile (overrides)
    COLLECTION_NAME=overrides
    ```
-2. Placer une icône `mobile/assets/icon.png` (512x512px)
+   **Important** : Vous avez deux bases MongoDB :
+   - `MONGO_URI` → Contient l'historique des moods (`daily_logs` collection)
+   - `MONGO_URI_MOBILE` → Stocke les données mobiles (`overrides` collection)
+   
+2. Placer une icône `mobile/assets/icon.png` (512x512px, optionnel - une icône par défaut sera générée)
 
 ## 🎵 Comment ça fonctionne
 

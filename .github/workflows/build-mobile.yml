@@ -33,9 +33,10 @@ jobs:
 
       - name: Create .env config
         run: |
-          echo "MONGO_URI=${{ secrets.MONGO_URI_MOBILE }}" > .env
+          echo "MONGO_URI=${{ secrets.MONGODB_URI }}" > .env
+          echo "MONGO_URI_MOBILE=${{ secrets.MONGO_URI_MOBILE }}" >> .env
           echo "COLLECTION_NAME=overrides" >> .env
-        # Note: We reuse MONGO_URI if generic, or user can add MONGO_URI_MOBILE
+        # Note: MONGO_URI for history (daily_logs), MONGO_URI_MOBILE for overrides
 
       - name: Generate Android Project
         run: flutter create .
@@ -59,7 +60,12 @@ jobs:
             flutter pub run flutter_launcher_icons
             echo "✅ Generated launcher icons from assets/icon.png"
           else
-            echo "⚠️ Warning: assets/icon.png not found, skipping icon generation"
+            echo "⚠️ Warning: assets/icon.png not found, creating default"
+            mkdir -p assets
+            # Create a simple default icon (512x512 solid color)
+            convert -size 512x512 xc:'#00FF9D' assets/icon.png
+            flutter pub run flutter_launcher_icons
+            echo "✅ Generated launcher icons from default image"
           fi
 
       - name: Build APK

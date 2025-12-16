@@ -280,10 +280,28 @@ class DailyLogManager:
                           date_str: str) -> Dict[str, Any]:
         """
         Retrieves manual overrides (sleep, mood) for a specific date.
-        Collection: 'overrides'
+        Collection: 'overrides' (from MONGO_URI_MOBILE if available)
         """
         try:
-            collection = db['overrides']
+            # Try to use mobile database for overrides
+            mongo_uri_mobile = os.environ.get("MONGO_URI_MOBILE")
+            if mongo_uri_mobile:
+                try:
+                    mobile_client = MongoClient(
+                        mongo_uri_mobile,
+                        tlsCAFile=certifi.where(),
+                        serverSelectionTimeoutMS=CONNECTION_TIMEOUT_MS,
+                        connectTimeoutMS=CONNECTION_TIMEOUT_MS
+                    )
+                    mobile_db = mobile_client.get_default_database()
+                    collection = mobile_db['overrides']
+                except Exception as mobile_error:
+                    logger.warning(f"Failed to connect to MONGO_URI_MOBILE, using fallback: {mobile_error}")
+                    collection = db['overrides']
+            else:
+                # Fallback to main database
+                collection = db['overrides']
+            
             override = collection.find_one({"date": date_str})
             if override:
                 logger.info(f"[OK] Found manual override for {date_str}: {override}")

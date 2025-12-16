@@ -14,9 +14,10 @@ def check_mobile_sync_freshness():
     Checks if mobile data was synced recently.
     Logs a warning if data is stale (> 3 hours old).
     """
-    mongo_uri = os.getenv("MONGODB_URI")
+    # Use MONGO_URI_MOBILE for overrides, fallback to MONGODB_URI
+    mongo_uri = os.getenv("MONGO_URI_MOBILE") or os.getenv("MONGODB_URI")
     if not mongo_uri:
-        print("⚠️  MONGODB_URI not set, skipping sync check")
+        print("⚠️  MONGO_URI_MOBILE or MONGODB_URI not set, skipping sync check")
         return
     
     try:
