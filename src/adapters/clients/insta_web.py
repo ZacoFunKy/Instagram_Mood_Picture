@@ -10,11 +10,11 @@ Provides browser-based authentication and profile updates:
 
 import os
 import datetime
-import time
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 
 import requests
+import pyotp
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ class InstagramWebUpdateError(Exception):
 class InstagramWebAuthenticator:
     """Handles Instagram web-based authentication."""
 
-    def __init__(self, username: str, password: str, totp_seed: Optional[str] = None):
+    def __init__(self, username: str, password: str, totp_seed: Optional[str] = None) -> None:
         """
         Initialize web authenticator.
 
@@ -62,7 +62,7 @@ class InstagramWebAuthenticator:
             username: Instagram username
             password: Instagram password
             totp_seed: Optional TOTP seed for 2FA
-
+        
         Raises:
             InstagramWebAuthError: If credentials invalid
         """
@@ -90,23 +90,13 @@ class InstagramWebAuthenticator:
     def _sanitize_totp_seed(seed: str) -> str:
         """
         Sanitizes TOTP seed.
-
         Removes spaces, newlines, converts to uppercase.
-
-        Args:
-            seed: Raw TOTP seed
-
-        Returns:
-            Cleaned seed
         """
         return seed.replace(" ", "").replace("\n", "").strip().upper()
 
     def _get_csrf_token(self) -> Optional[str]:
         """
         Fetches CSRF token from Instagram main page.
-
-        Returns:
-            CSRF token string, or None on error
         """
         try:
             resp = self.session.get(BASE_URL, timeout=API_TIMEOUT)
@@ -119,7 +109,6 @@ class InstagramWebAuthenticator:
     def _try_session_id_auth(self, session_id: str) -> bool:
         """
         Attempts authentication using session ID.
-
         Bypasses username/password login and 2FA entirely.
 
         Args:
@@ -146,7 +135,6 @@ class InstagramWebAuthenticator:
     def _try_credential_auth(self) -> bool:
         """
         Attempts authentication using username/password.
-
         Falls back to TOTP 2FA if needed.
 
         Returns:
@@ -203,17 +191,9 @@ class InstagramWebAuthenticator:
 
         Returns:
             True if 2FA successful, False otherwise
-
-        Raises:
-            InstagramWebAuthError: If TOTP not configured
         """
         if not self.totp_seed:
             raise InstagramWebAuthError("2FA required but TOTP seed not provided")
-
-        try:
-            import pyotp
-        except ImportError:
-            raise InstagramWebAuthError("pyotp library required for 2FA")
 
         try:
             two_factor_info = auth_response.get("two_factor_info", {})
@@ -250,17 +230,13 @@ class InstagramWebAuthenticator:
             logger.error(f"2FA handling failed: {e}")
             raise InstagramWebAuthError(f"2FA failed: {e}") from e
 
-    def authenticate(self) -> Any:
+    def authenticate(self) -> requests.Session:
         """
         Authenticates with Instagram.
-
         Attempts session ID first (bypasses 2FA), falls back to credentials.
 
         Returns:
-            Authenticated session
-
-        Raises:
-            InstagramWebAuthError: If all auth methods fail
+            Authenticated requests.Session object.
         """
         # Try session ID first (if provided)
         session_id = os.environ.get("IG_SESSIONID")
@@ -281,7 +257,7 @@ class InstagramWebAuthenticator:
 class InstagramWebProfileManager:
     """Manages profile picture updates via web API."""
 
-    def __init__(self, session: Any):
+    def __init__(self, session: requests.Session) -> None:
         """
         Initialize manager.
 
@@ -295,14 +271,10 @@ class InstagramWebProfileManager:
         Updates profile picture via web API.
 
         Args:
-            image_path: Path to image file
+            image_path: Path to image file.
 
         Returns:
-            True if successful, False otherwise
-
-        Example:
-            >>> manager = InstagramWebProfileManager(session)
-            >>> success = manager.update_profile_picture("assets/happy.png")
+            True if successful, False otherwise.
         """
         if not os.path.exists(image_path):
             logger.warning(f"Image not found: {image_path}")
@@ -355,13 +327,10 @@ def update_profile_picture_web(mood_name: str) -> bool:
     - IG_SESSIONID: Optional session ID (bypasses login)
 
     Args:
-        mood_name: Mood name (must match image in assets/)
+        mood_name: Mood name (must match image in assets/).
 
     Returns:
-        True if successful, False otherwise
-
-    Example:
-        >>> success = update_profile_picture_web("confident")
+        True if successful, False otherwise.
     """
     try:
         username = os.environ.get("IG_USERNAME")

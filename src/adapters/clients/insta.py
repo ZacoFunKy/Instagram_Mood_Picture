@@ -1,24 +1,30 @@
 """
-Instagram client for profile picture management.
+Instagram client for profile picture management (Mobile API emulation).
 
-Provides image-based profile picture updates with:
+Provides image-based profile picture updates using the native `instagrapi` library.
+This mimics the mobile app API, which can be more robust than web endpoints
+but carries higher risk of flagging if not configured correctly (fingerprinting).
+
+Features:
 - Native instagrapi library support
 - TOTP-based 2FA
-- Device fingerprinting for bypass
+- Device fingerprinting for anti-detection
 - Locale configuration
 """
 
 import os
 import logging
-from typing import Optional, Any
+from typing import Optional, Any, Dict
 
+# Graceful fallback if instagrapi is not installed
 try:
     from instagrapi import Client
 except ImportError:
-    Client = None
+    Client = None # type: ignore
     logging.warning("instagrapi library not installed. Instagram updates will be skipped.")
 
 logger = logging.getLogger(__name__)
+
 
 # ============================================================================
 # CONSTANTS
@@ -64,7 +70,7 @@ class InstagramUpdateError(Exception):
 class InstagramAuthenticator:
     """Handles Instagram authentication with TOTP support."""
 
-    def __init__(self, username: str, password: str, totp_seed: Optional[str] = None):
+    def __init__(self, username: str, password: str, totp_seed: Optional[str] = None) -> None:
         """
         Initialize authenticator.
 
@@ -85,37 +91,29 @@ class InstagramAuthenticator:
         self.username = username
         self.password = password
         self.totp_seed = self._sanitize_totp_seed(totp_seed) if totp_seed else None
-        self.client = None
+        self.client: Optional[Client] = None # type: ignore
 
     @staticmethod
     def _sanitize_totp_seed(seed: str) -> str:
         """
         Sanitizes TOTP seed.
-
         Removes spaces, newlines, and converts to uppercase.
-
-        Args:
-            seed: Raw TOTP seed string
-
-        Returns:
-            Cleaned seed
         """
         return seed.replace(" ", "").replace("\n", "").strip().upper()
 
     def authenticate(self) -> Any:
         """
         Authenticates with Instagram.
-
         Sets device fingerprint and locale, handles TOTP if needed.
 
         Returns:
-            Authenticated instagrapi Client
+            Authenticated instagrapi Client.
 
         Raises:
-            InstagramAuthError: If login fails
+            InstagramAuthError: If login fails.
         """
         try:
-            client = Client()
+            client = Client() # type: ignore
 
             # Set device fingerprint (bypass "Update Instagram" error)
             client.set_device(DEVICE_CONFIG)
@@ -146,7 +144,7 @@ class InstagramAuthenticator:
 class InstagramProfileManager:
     """Manages Instagram profile picture updates."""
 
-    def __init__(self, client: Any):
+    def __init__(self, client: Any) -> None:
         """
         Initialize manager.
 
@@ -164,11 +162,7 @@ class InstagramProfileManager:
             assets_folder: Path to assets folder containing images
 
         Returns:
-            True if successful, False otherwise
-
-        Example:
-            >>> manager = InstagramProfileManager(client)
-            >>> success = manager.update_profile_picture("happy")
+            True if successful, False otherwise.
         """
         image_path = os.path.join(assets_folder, f"{mood_name}.png")
 
@@ -200,15 +194,10 @@ def update_profile_picture(mood_name: str) -> bool:
     - IG_TOTP_SEED: Optional TOTP seed for 2FA
 
     Args:
-        mood_name: Mood name (must match image file in assets/)
+        mood_name: Mood name (must match image file in assets/).
 
     Returns:
-        True if successful, False if skipped (library not installed)
-
-    Example:
-        >>> success = update_profile_picture("confident")
-        >>> if success:
-        ...     print("Profile updated!")
+        True if successful, False if skipped (library not installed).
     """
     if Client is None:
         logger.warning("instagrapi not installed. Update skipped.")

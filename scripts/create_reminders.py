@@ -10,13 +10,14 @@ import os
 import logging
 import datetime
 import json
-from typing import Optional
+from typing import Optional, Dict, Any, List
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 logger = logging.getLogger(__name__)
+
 
 # ============================================================================
 # CONSTANTS
@@ -48,20 +49,17 @@ class ReminderServiceError(Exception):
 class ReminderConfig:
     """Manages reminder configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Load configuration from environment."""
         self.service_account_str = os.environ.get("GOOGLE_SERVICE_ACCOUNT")
         self.calendar_id = os.environ.get("TARGET_CALENDAR_ID")
 
-    def get_service_account_info(self) -> Optional[dict]:
+    def get_service_account_info(self) -> Optional[Dict[str, Any]]:
         """
         Parses service account credentials.
 
         Returns:
-            Parsed JSON dict, or None if not configured
-
-        Raises:
-            ReminderServiceError: If parsing fails
+            Parsed JSON dict, or None if not configured.
         """
         if not self.service_account_str:
             return None
@@ -77,7 +75,7 @@ class ReminderConfig:
         Validates configuration.
 
         Returns:
-            True if valid, raises exception otherwise
+            True if valid, raises exception otherwise.
         """
         if not self.service_account_str:
             raise ReminderServiceError("GOOGLE_SERVICE_ACCOUNT not configured")
@@ -93,25 +91,13 @@ class ReminderConfig:
 class GoogleCalendarService:
     """Provides Google Calendar API interface."""
 
-    def __init__(self, config: ReminderConfig):
-        """
-        Initialize service.
-
-        Args:
-            config: ReminderConfig instance
-        """
+    def __init__(self, config: ReminderConfig) -> None:
         self.config = config
         self.service = self._build_service()
 
-    def _build_service(self) -> any:
+    def _build_service(self) -> Any:
         """
         Builds Google Calendar API service.
-
-        Returns:
-            Google API service object
-
-        Raises:
-            ReminderServiceError: If service build fails
         """
         try:
             creds_info = self.config.get_service_account_info()
@@ -135,7 +121,7 @@ class GoogleCalendarService:
             target_date: Target date for event
 
         Returns:
-            True if successful, False otherwise
+            True if successful, False otherwise.
         """
         try:
             date_str = target_date.strftime('%Y-%m-%d')
@@ -182,23 +168,13 @@ class GoogleCalendarService:
 class MaintenanceReminderScheduler:
     """Schedules maintenance reminder events."""
 
-    def __init__(self, service: GoogleCalendarService):
-        """
-        Initialize scheduler.
-
-        Args:
-            service: GoogleCalendarService instance
-        """
+    def __init__(self, service: GoogleCalendarService) -> None:
         self.service = service
 
     def schedule_instagram_renewal(self) -> bool:
         """
         Schedules Instagram session ID renewal reminder.
-
         Creates reminder 90 days from now.
-
-        Returns:
-            True if successful, False otherwise
         """
         target_date = datetime.date.today() + datetime.timedelta(days=INSTAGRAM_SESSION_DAYS)
 
@@ -219,11 +195,7 @@ class MaintenanceReminderScheduler:
     def schedule_youtube_headers_renewal(self) -> bool:
         """
         Schedules YouTube Music headers refresh reminder.
-
         Creates reminder 180 days from now.
-
-        Returns:
-            True if successful, False otherwise
         """
         target_date = datetime.date.today() + datetime.timedelta(days=YOUTUBE_HEADERS_DAYS)
 
@@ -246,7 +218,7 @@ class MaintenanceReminderScheduler:
         Schedules all maintenance reminders.
 
         Returns:
-            True if all successful, False if any failed
+            True if all successful, False if any failed.
         """
         results = [
             self.schedule_instagram_renewal(),
@@ -277,10 +249,6 @@ def create_maintenance_reminders() -> None:
     Requires environment variables:
     - GOOGLE_SERVICE_ACCOUNT: Service account credentials JSON
     - TARGET_CALENDAR_ID: Google Calendar ID
-
-    Example:
-        >>> from scripts.create_reminders_refactored import create_maintenance_reminders
-        >>> create_maintenance_reminders()
     """
     try:
         config = ReminderConfig()

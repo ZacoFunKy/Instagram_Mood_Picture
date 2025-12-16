@@ -12,21 +12,21 @@ import os
 import json
 import datetime
 import logging
-from typing import List, Dict, Optional, Tuple, Any
+from typing import List, Dict, Optional, Any, Union
 from enum import Enum
 
 import requests
-from icalendar import Calendar
 import recurring_ical_events
-import pytz
-
+from icalendar import Calendar
 from google.oauth2 import service_account
-from googleapiclient.discovery import build
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build, Resource
 
 # Suppress Google API logging
 logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR)
 
 logger = logging.getLogger(__name__)
+
 
 # ============================================================================
 # CONSTANTS
@@ -73,21 +73,18 @@ class CalendarFetchError(Exception):
 class CalendarConfig:
     """Manages calendar configuration from environment."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Load configuration from environment variables."""
         self.service_account_str = os.environ.get("GOOGLE_SERVICE_ACCOUNT")
         self.calendar_ids_str = os.environ.get("TARGET_CALENDAR_ID")
         self.timezone = "Europe/Paris"
 
-    def get_service_account_info(self) -> Optional[Dict]:
+    def get_service_account_info(self) -> Optional[Dict[str, Any]]:
         """
         Parses service account credentials.
 
         Returns:
-            Parsed JSON dict, or None if not configured
-
-        Raises:
-            CalendarAuthError: If JSON parsing fails
+            Parsed JSON dict, or None if not configured.
         """
         if not self.service_account_str:
             return None
@@ -103,7 +100,7 @@ class CalendarConfig:
         Parses calendar IDs from configuration.
 
         Returns:
-            List of calendar ID strings
+            List of calendar ID strings.
         """
         if not self.calendar_ids_str:
             return []
@@ -118,13 +115,7 @@ class CalendarConfig:
 class ICSFetcher:
     """Fetches and parses ICS calendar files."""
 
-    def __init__(self, config_file: str = ICS_CONFIG_FILE):
-        """
-        Initialize ICS fetcher.
-
-        Args:
-            config_file: Path to ICS config JSON file
-        """
+    def __init__(self, config_file: str = ICS_CONFIG_FILE) -> None:
         self.config_file = config_file
 
     def fetch_events(self, start_dt: datetime.datetime,
@@ -132,18 +123,12 @@ class ICSFetcher:
         """
         Fetches events from ICS sources.
 
-        Sources can be HTTP URLs or local files, defined in ics_config.json.
-
         Args:
-            start_dt: Start time for event range
-            end_dt: End time for event range
+            start_dt: Start time for event range.
+            end_dt: End time for event range.
 
         Returns:
-            List of event dicts with keys: start, summary, calendar_name
-
-        Example:
-            >>> fetcher = ICSFetcher()
-            >>> events = fetcher.fetch_events(start_dt, end_dt)
+            List of event dicts with keys: start, summary, calendar_name.
         """
         if not os.path.exists(self.config_file):
             logger.debug(f"ICS config file not found: {self.config_file}")
@@ -178,12 +163,6 @@ class ICSFetcher:
     def _fetch_content(url: str) -> Optional[bytes]:
         """
         Fetches ICS content from URL or local file.
-
-        Args:
-            url: HTTP URL or local file path
-
-        Returns:
-            File content bytes, or None on error
         """
         try:
             if url.startswith("http"):
@@ -212,14 +191,6 @@ class ICSFetcher:
                        end_dt: datetime.datetime) -> List[Dict[str, Any]]:
         """
         Parses calendar content and extracts events in range.
-
-        Args:
-            content: ICS file content bytes
-            start_dt: Start time for range
-            end_dt: End time for range
-
-        Returns:
-            List of normalized event dicts
         """
         try:
             cal = Calendar.from_ical(content)
@@ -234,10 +205,20 @@ class ICSFetcher:
 
                 if not dtstart:
                     continue
+                
+                # Verify validity of dtstart (can be date or datetime)
+                start_val = dtstart.dt
+                
+                # Format appropriately
+                if isinstance(start_val, datetime.datetime):
+                    iso_val = start_val.isoformat()
+                elif isinstance(start_val, datetime.date):
+                    iso_val = start_val.isoformat()
+                else:
+                    iso_val = str(start_val)
 
-                event_dt = dtstart.dt
                 events.append({
-                    'start': {'dateTime': event_dt.isoformat()},
+                    'start': {'dateTime': iso_val},
                     'summary': summary,
                     'calendar_name': 'ICS'
                 })
@@ -256,29 +237,13 @@ class ICSFetcher:
 class GoogleCalendarFetcher:
     """Fetches events from Google Calendar API."""
 
-    def __init__(self, config: Optional[CalendarConfig] = None):
-        """
-        Initialize fetcher.
-
-        Args:
-            config: CalendarConfig instance
-        """
+    def __init__(self, config: Optional[CalendarConfig] = None) -> None:
         self.config = config or CalendarConfig()
 
     def fetch_events(self, start_dt: datetime.datetime,
                     end_dt: datetime.datetime) -> List[Dict[str, Any]]:
         """
         Fetches events from Google Calendar.
-
-        Args:
-            start_dt: Start time for event range
-            end_dt: End time for event range
-
-        Returns:
-            List of event dicts in Google Calendar format
-
-        Raises:
-            CalendarFetchError: If API call fails
         """
         try:
             service = self._build_service()
@@ -303,15 +268,10 @@ class GoogleCalendarFetcher:
             logger.error(f"Google Calendar fetch failed: {e}")
             raise CalendarFetchError(str(e)) from e
 
-    def _build_service(self) -> any:
+    def _build_service(self) -> Any:
         """
         Builds Google Calendar API service.
-
-        Returns:
-            Google API service object
-
-        Raises:
-            CalendarAuthError: If authentication fails
+        Returns: Resource object for interacting with the API.
         """
         try:
             service_account_info = self.config.get_service_account_info()
@@ -330,20 +290,14 @@ class GoogleCalendarFetcher:
             raise CalendarAuthError(f"Failed to build service: {e}") from e
 
     @staticmethod
-    def _fetch_calendar(service: any, cal_id: str,
+    def _fetch_calendar(service: Any, cal_id: str,
                        start_dt: datetime.datetime,
                        end_dt: datetime.datetime) -> List[Dict[str, Any]]:
         """
         Fetches events from a specific Google Calendar.
 
         Args:
-            service: Google API service
-            cal_id: Calendar ID
-            start_dt: Start time
-            end_dt: End time
-
-        Returns:
-            List of event dicts
+            service: Google API Resource object.
         """
         try:
             time_min = start_dt.strftime('%Y-%m-%dT00:00:00Z')
@@ -377,31 +331,12 @@ class GoogleCalendarFetcher:
 class AlertEventCreator:
     """Creates alert events in Google Calendar."""
 
-    def __init__(self, config: Optional[CalendarConfig] = None):
-        """
-        Initialize creator.
-
-        Args:
-            config: CalendarConfig instance
-        """
+    def __init__(self, config: Optional[CalendarConfig] = None) -> None:
         self.config = config or CalendarConfig()
 
     def create_alert(self, summary: str, description: str) -> bool:
         """
         Creates an alert event in Google Calendar.
-
-        Used to notify user of system failures.
-
-        Args:
-            summary: Alert summary
-            description: Alert description
-
-        Returns:
-            True if successful, False otherwise
-
-        Example:
-            >>> creator = AlertEventCreator()
-            >>> created = creator.create_alert("Data Sync Failed", "YouTube Music sync error")
         """
         try:
             service = self._build_service()
@@ -429,7 +364,7 @@ class AlertEventCreator:
             logger.error(f"Failed to create alert: {e}")
             return False
 
-    def _build_service(self) -> any:
+    def _build_service(self) -> Any:
         """Builds Google API service with write access."""
         service_account_info = self.config.get_service_account_info()
 
@@ -443,7 +378,7 @@ class AlertEventCreator:
 
         return build('calendar', 'v3', credentials=creds)
 
-    def _has_duplicate_alert(self, service: any, cal_id: str, summary: str) -> bool:
+    def _has_duplicate_alert(self, service: Any, cal_id: str, summary: str) -> bool:
         """Checks if similar alert already exists today."""
         try:
             today = datetime.date.today()
@@ -508,19 +443,7 @@ class EventFormatter:
                             today_date: Optional[datetime.date] = None) -> str:
         """
         Formats event list into readable summary.
-
         Groups events into PAST, TODAY, and UPCOMING sections.
-
-        Args:
-            all_events: List of event dicts
-            today_date: Reference date (defaults to today)
-
-        Returns:
-            Formatted string summary
-
-        Example:
-            >>> events = [{"start": {"dateTime": "2025-12-12T14:00"}, "summary": "Meeting"}]
-            >>> summary = EventFormatter.format_events_summary(events)
         """
         if not all_events:
             return "No events found (Past, Today, or Week)."
@@ -540,7 +463,11 @@ class EventFormatter:
             start_raw = EventFormatter._get_start_str(event)
             summary = event.get('summary', 'Busy')
             cal_name = event.get('calendar_name', '?')
-            line = f"[{cal_name}] {start_raw}: {summary}"
+            
+            # Truncate summary if too long
+            summary_clean = summary[:60] + "..." if len(summary) > 60 else summary
+            
+            line = f"[{cal_name}] {start_raw}: {summary_clean}"
 
             start_date_part = start_raw.split('T')[0] if 'T' in start_raw else start_raw
 
@@ -567,7 +494,8 @@ class EventFormatter:
 
         if upcoming:
             output.append("\n--- CONTEXTE SEMAINE ---")
-            output.extend(upcoming)
+            # Limit looking ahead to avoid token bloat
+            output.extend(upcoming[:15])
 
         return "\n".join(output)
 
@@ -575,7 +503,7 @@ class EventFormatter:
     def _get_start_str(event: Dict[str, Any]) -> str:
         """Extracts start datetime string from event."""
         start_dict = event.get('start', {})
-        return start_dict.get('dateTime', start_dict.get('date', ''))
+        return str(start_dict.get('dateTime', start_dict.get('date', '')))
 
 
 # ============================================================================
@@ -585,15 +513,7 @@ class EventFormatter:
 def get_calendar_events_structured() -> List[Dict[str, Any]]:
     """
     Fetches structured calendar events (raw event dicts).
-
     Used for pre-processor analysis instead of formatted summary.
-
-    Returns:
-        List of event dicts with 'summary' and 'start' fields
-
-    Example:
-        >>> events = get_calendar_events_structured()
-        >>> events[0]  # {'summary': 'Meeting', 'start': {...}}
     """
     try:
         # Time range: 2 days past to 8 days future
@@ -621,15 +541,7 @@ def get_calendar_events_structured() -> List[Dict[str, Any]]:
 def get_week_events() -> str:
     """
     Fetches and formats calendar events for the week.
-
     Combines events from Google Calendar and ICS files, groups by time period.
-
-    Returns:
-        Formatted string summary ready for AI prompt
-
-    Example:
-        >>> summary = get_week_events()
-        >>> print(summary)
     """
     try:
         # Use structured events to get formatted summary
@@ -646,15 +558,7 @@ def get_week_events() -> str:
 def create_report_event(summary: str, description: str) -> None:
     """
     Creates an alert event in Google Calendar.
-
     Used by main.py to notify of system failures.
-
-    Args:
-        summary: Alert title
-        description: Alert details
-
-    Example:
-        >>> create_report_event("YouTube Music Sync Failed", "Connection timeout")
     """
     creator = AlertEventCreator()
     creator.create_alert(summary, description)

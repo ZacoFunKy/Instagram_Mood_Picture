@@ -1,11 +1,14 @@
+
 name: Predict Mood - Two Daily Executions
 
 on:
   schedule:
-    # 3am UTC = Nuit/Très tôt matin - Prédiction pour la journée qui arrive
+    # 3am UTC (4am/5am FR) = Matin (Wake Up)
     - cron: '0 3 * * *'
-    # 2pm UTC = Après-midi - Prédiction pour ce soir et demain matin
-    - cron: '0 14 * * *'
+    # 12pm UTC (1pm/2pm FR) = Midi/Debut Aprem
+    - cron: '0 12 * * *'
+    # 5pm UTC (6pm/7pm FR) = Soirée (Wind Down)
+    - cron: '0 17 * * *'
   
   # Permet aussi de lancer manuellement via GitHub Actions UI avec options
   workflow_dispatch:
@@ -44,6 +47,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       
+      # [NEW] Create browser_auth.json for YT Music
+      # Requires secret YTMUSIC_AUTH containing JSON
+      - name: Create Auth Files
+        env:
+          YTMUSIC_AUTH_JSON: ${{ secrets.YTMUSIC_AUTH }}
+        run: |
+          echo "$YTMUSIC_AUTH_JSON" > browser_auth.json
+          # Create log dir just in case
+          mkdir -p logs
+
       - name: Run Mood Prediction
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -61,13 +74,14 @@ jobs:
           if [ "${{ github.event.inputs.no_ai }}" = "true" ]; then ARGS="$ARGS --no-ai"; fi
           if [ "${{ github.event.inputs.no_delay }}" = "true" ]; then ARGS="$ARGS --no-delay"; fi
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
-          python main.py $ARGS
+          python run.py $ARGS
       
       - name: Upload logs on failure
-        if: failure()
+        if: always() # Upload logs even on success for debugging
         uses: actions/upload-artifact@v4
         with:
           name: execution-logs
           path: |
             *.log
+            logs/*.log
             dry_run_prompt.log

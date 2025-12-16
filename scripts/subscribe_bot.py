@@ -8,13 +8,14 @@ to the service account's calendar list.
 import os
 import json
 import logging
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 logger = logging.getLogger(__name__)
+
 
 # ============================================================================
 # CONSTANTS
@@ -39,20 +40,17 @@ class CalendarSubscriptionError(Exception):
 class SubscriptionConfig:
     """Manages subscription configuration."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Load configuration from environment."""
         self.service_account_str = os.environ.get("GOOGLE_SERVICE_ACCOUNT")
         self.calendar_ids_str = os.environ.get("TARGET_CALENDAR_ID")
 
-    def get_service_account_info(self) -> Optional[dict]:
+    def get_service_account_info(self) -> Optional[Dict[str, Any]]:
         """
         Parses service account credentials.
 
         Returns:
-            Parsed JSON dict, or None if not configured
-
-        Raises:
-            CalendarSubscriptionError: If parsing fails
+            Parsed JSON dict, or None if not configured.
         """
         if not self.service_account_str:
             return None
@@ -68,7 +66,7 @@ class SubscriptionConfig:
         Parses calendar IDs from configuration.
 
         Returns:
-            List of calendar ID strings
+            List of calendar ID strings.
         """
         if not self.calendar_ids_str:
             logger.warning("TARGET_CALENDAR_ID not configured")
@@ -81,7 +79,7 @@ class SubscriptionConfig:
         Validates configuration.
 
         Returns:
-            True if valid, raises exception otherwise
+            True if valid, raises exception otherwise.
         """
         if not self.service_account_str:
             raise CalendarSubscriptionError("GOOGLE_SERVICE_ACCOUNT not configured")
@@ -100,25 +98,13 @@ class SubscriptionConfig:
 class CalendarListManager:
     """Manages calendar subscriptions via Google Calendar API."""
 
-    def __init__(self, config: SubscriptionConfig):
-        """
-        Initialize manager.
-
-        Args:
-            config: SubscriptionConfig instance
-        """
+    def __init__(self, config: SubscriptionConfig) -> None:
         self.config = config
         self.service = self._build_service()
 
-    def _build_service(self) -> any:
+    def _build_service(self) -> Any:
         """
         Builds Google Calendar API service.
-
-        Returns:
-            Google API service object
-
-        Raises:
-            CalendarSubscriptionError: If service build fails
         """
         try:
             creds_info = self.config.get_service_account_info()
@@ -139,7 +125,7 @@ class CalendarListManager:
             calendar_id: Calendar ID to check
 
         Returns:
-            True if subscribed, False otherwise
+            True if subscribed, False otherwise.
         """
         try:
             self.service.calendarList().get(calendarId=calendar_id).execute()
@@ -157,18 +143,11 @@ class CalendarListManager:
         """
         Subscribes service account to a calendar.
 
-        Adds calendar to service account's calendar list so it can be accessed
-        in subsequent API calls.
-
         Args:
             calendar_id: Calendar ID to subscribe to
 
         Returns:
-            True if successful (or already subscribed), False on error
-
-        Example:
-            >>> manager = CalendarListManager(config)
-            >>> success = manager.subscribe("primary")
+            True if successful (or already subscribed), False on error.
         """
         try:
             # Check existing subscription first
@@ -205,7 +184,7 @@ class CalendarListManager:
 class CalendarSubscriber:
     """Orchestrates calendar subscription process."""
 
-    def __init__(self, manager: CalendarListManager):
+    def __init__(self, manager: CalendarListManager) -> None:
         """
         Initialize subscriber.
 
@@ -222,7 +201,7 @@ class CalendarSubscriber:
             calendar_ids: List of calendar IDs
 
         Returns:
-            True if all successful, False if any failed
+            True if all successful, False if any failed.
         """
         if not calendar_ids:
             logger.warning("No calendars to subscribe to")
@@ -256,10 +235,6 @@ def subscribe_bot_to_calendars() -> None:
     Requires environment variables:
     - GOOGLE_SERVICE_ACCOUNT: Service account credentials JSON
     - TARGET_CALENDAR_ID: Calendar IDs (comma-separated)
-
-    Example:
-        >>> from scripts.subscribe_bot_refactored import subscribe_bot_to_calendars
-        >>> subscribe_bot_to_calendars()
     """
     try:
         config = SubscriptionConfig()

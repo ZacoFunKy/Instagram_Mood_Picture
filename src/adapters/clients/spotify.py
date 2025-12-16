@@ -13,13 +13,13 @@ The client uses alternative endpoints:
 import os
 import base64
 import logging
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Any, Union
 from enum import IntEnum
 
 import requests
 
-
 logger = logging.getLogger(__name__)
+
 
 # ============================================================================
 # CONSTANTS
@@ -80,16 +80,16 @@ class AudioFeatureEstimator:
     VALENCE_BASE = 0.15  # Minimum valence for sad tracks
 
     @classmethod
-    def estimate(cls, track_data: Dict[str, any]) -> Dict[str, float | int]:
+    def estimate(cls, track_data: Dict[str, Any]) -> Dict[str, Union[float, int]]:
         """
         Estimates audio features from track metadata.
 
         Args:
-            track_data: Spotify track object with 'popularity' and 'explicit' fields
+            track_data: Spotify track object with 'popularity' and 'explicit' fields.
 
         Returns:
-            Dict with keys: valence, energy, danceability, tempo
-            All feature values normalized to 0-1 range except tempo (BPM)
+            Dict with keys: valence, energy, danceability, tempo.
+            All feature values normalized to 0-1 range except tempo (BPM).
         """
         popularity = track_data.get("popularity", 50) / 100.0
         is_explicit = track_data.get("explicit", False)
@@ -117,10 +117,6 @@ class AudioFeatureEstimator:
     def _estimate_energy(cls, popularity: float, is_explicit: bool) -> float:
         """
         Estimates energy from popularity and explicit flag.
-
-        Energy correlates with:
-        - Track popularity (popular tracks tend more energetic)
-        - Explicit flag (explicit tracks tend more energetic)
         """
         energy = (popularity * cls.POPULARITY_TO_ENERGY_WEIGHT +
                   (cls.EXPLICIT_ENERGY_BONUS if is_explicit else 0))
@@ -130,10 +126,6 @@ class AudioFeatureEstimator:
     def _estimate_valence(cls, popularity: float) -> float:
         """
         Estimates valence (positivity) from popularity.
-
-        Valence correlates with:
-        - Track popularity (popular tracks tend more positive)
-        - Has minimum floor to account for sad tracks
         """
         valence = popularity * cls.POPULARITY_TO_VALENCE_WEIGHT + cls.VALENCE_BASE / 100.0
         return min(1.0, valence)
@@ -142,10 +134,6 @@ class AudioFeatureEstimator:
     def _estimate_danceability(cls, popularity: float, is_explicit: bool) -> float:
         """
         Estimates danceability from popularity and explicit flag.
-
-        Danceability correlates with:
-        - Track popularity
-        - Explicit flag (often associated with club/dance music)
         """
         base_danceability = popularity * 0.6
         explicit_bonus = 0.3 if is_explicit else 0
@@ -156,9 +144,6 @@ class AudioFeatureEstimator:
     def _estimate_tempo(cls, popularity: float) -> int:
         """
         Estimates tempo (BPM) from popularity.
-
-        Tempo range: TEMPO_MIN to TEMPO_MAX BPM
-        Popular tracks tend towards middle-to-upper range.
         """
         tempo_range = AudioFeatureRange.TEMPO_MAX - AudioFeatureRange.TEMPO_MIN
         base_tempo = AudioFeatureRange.TEMPO_MIN + (popularity * tempo_range)
@@ -172,7 +157,7 @@ class AudioFeatureEstimator:
 class SpotifyAuthenticator:
     """Handles Spotify API authentication using Client Credentials flow."""
 
-    def __init__(self, client_id: Optional[str] = None, client_secret: Optional[str] = None):
+    def __init__(self, client_id: Optional[str] = None, client_secret: Optional[str] = None) -> None:
         """
         Initialize authenticator.
 
@@ -181,7 +166,7 @@ class SpotifyAuthenticator:
             client_secret: Spotify client secret (defaults to env var SPOTIFY_CLIENT_SECRET)
 
         Raises:
-            ValueError: If credentials not provided and env vars not set
+            ValueError: If credentials not provided and env vars not set.
         """
         self.client_id = client_id or os.environ.get("SPOTIFY_CLIENT_ID")
         self.client_secret = client_secret or os.environ.get("SPOTIFY_CLIENT_SECRET")
@@ -190,19 +175,17 @@ class SpotifyAuthenticator:
             raise ValueError("Spotify credentials not configured (SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET)")
 
         self.access_token: Optional[str] = None
-        self.token_expires_at: Optional[float] = None
 
     def get_access_token(self) -> Optional[str]:
         """
         Obtains Spotify access token using Client Credentials flow.
-
         Implements simple caching: reuses token until near expiry.
 
         Returns:
-            Access token string, or None if authentication fails
+            Access token string, or None if authentication fails.
 
         Raises:
-            SpotifyAuthError: On authentication failures
+            SpotifyAuthError: On authentication failures.
         """
         if self.access_token:
             return self.access_token
@@ -259,16 +242,9 @@ class SpotifyClient:
     3. AudioFeatureEstimator: Derive features from metadata
     """
 
-    def __init__(self, client_id: Optional[str] = None, client_secret: Optional[str] = None):
-        """
-        Initialize Spotify client.
-
-        Args:
-            client_id: Spotify client ID
-            client_secret: Spotify client secret
-        """
+    def __init__(self, client_id: Optional[str] = None, client_secret: Optional[str] = None) -> None:
         try:
-            self.auth = SpotifyAuthenticator(client_id, client_secret)
+            self.auth: Optional[SpotifyAuthenticator] = SpotifyAuthenticator(client_id, client_secret)
         except ValueError as e:
             logger.warning(f"Spotify client disabled: {e}")
             self.auth = None
@@ -277,7 +253,7 @@ class SpotifyClient:
         """Checks if Spotify client is properly configured."""
         return self.auth is not None
 
-    def search_track(self, title: str, artist: str) -> Optional[Dict]:
+    def search_track(self, title: str, artist: str) -> Optional[Dict[str, Any]]:
         """
         Searches for a track on Spotify.
 
@@ -286,14 +262,9 @@ class SpotifyClient:
             artist: Artist name
 
         Returns:
-            Full track object dict, or None if not found or error
-
-        Example:
-            >>> track = client.search_track("Bohemian Rhapsody", "Queen")
-            >>> if track:
-            ...     print(track['id'], track['popularity'])
+            Full track object dict, or None if not found or error.
         """
-        if not self.is_available():
+        if not self.is_available() or not self.auth:
             return None
 
         try:
@@ -335,7 +306,7 @@ class SpotifyClient:
             logger.debug(f"Search failed for {title} - {artist}: {e}")
             return None
 
-    def get_track_details(self, track_id: str) -> Optional[Dict]:
+    def get_track_details(self, track_id: str) -> Optional[Dict[str, Any]]:
         """
         Fetches full track details from /v1/tracks/{id}.
 
@@ -343,13 +314,9 @@ class SpotifyClient:
             track_id: Spotify track ID
 
         Returns:
-            Full track object dict, or None on error
-
-        Note:
-            /v1/audio-features was deprecated Nov 27, 2024.
-            Using /v1/tracks instead for metadata-based estimation.
+            Full track object dict, or None on error.
         """
-        if not self.is_available():
+        if not self.is_available() or not self.auth:
             return None
 
         try:
@@ -376,7 +343,7 @@ class SpotifyClient:
             logger.debug(f"Failed to get track details for {track_id}: {e}")
             return None
 
-    def enrich_track(self, title: str, artist: str) -> Dict[str, float | int]:
+    def enrich_track(self, title: str, artist: str) -> Dict[str, Union[float, int]]:
         """
         Searches track and returns estimated audio features.
 
@@ -390,12 +357,8 @@ class SpotifyClient:
             artist: Artist name
 
         Returns:
-            Dict with keys: valence, energy, danceability, tempo
-            Returns default values (0.5, 0.5, 0.5, 120) if search fails
-
-        Example:
-            >>> features = client.enrich_track("Shape of You", "Ed Sheeran")
-            >>> print(f"Energy: {features['energy']}, Tempo: {features['tempo']}")
+            Dict with keys: valence, energy, danceability, tempo.
+            Returns default values if search fails.
         """
         if not self.is_available():
             logger.debug(f"Spotify not available, returning defaults for {title}")
@@ -419,7 +382,7 @@ class SpotifyClient:
         return features
 
     @staticmethod
-    def _default_features() -> Dict[str, float | int]:
+    def _default_features() -> Dict[str, Union[float, int]]:
         """Returns default audio features when estimation fails."""
         return {
             "valence": 0.5,
@@ -439,16 +402,7 @@ _spotify_client_instance: Optional[SpotifyClient] = None
 def get_spotify_client() -> SpotifyClient:
     """
     Returns or creates the singleton Spotify client instance.
-
-    This pattern ensures a single authenticated client across the application,
-    reducing redundant authentication calls.
-
-    Returns:
-        SpotifyClient instance (always successful, gracefully degraded if auth fails)
-
-    Example:
-        >>> client = get_spotify_client()
-        >>> features = client.enrich_track("Shape of You", "Ed Sheeran")
+    This pattern ensures a single authenticated client across the application.
     """
     global _spotify_client_instance
     if _spotify_client_instance is None:
