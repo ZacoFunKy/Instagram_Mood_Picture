@@ -55,6 +55,20 @@ jobs:
           echo "✅ .env copied to mobile/ directory"
           cat mobile/.env
 
+      - name: Restore Android Configuration
+        run: |
+          # After flutter create, restore our custom Android files
+          if [ -f "mobile/android/build.gradle" ]; then
+            echo "✅ Restoring custom Android configuration"
+            mkdir -p android/app
+            # Preserve our custom build.gradle files
+            [ -f "mobile/android/build.gradle" ] && cp mobile/android/build.gradle android/
+            [ -f "mobile/android/app/build.gradle" ] && cp mobile/android/app/build.gradle android/app/
+            [ -f "mobile/android/gradle.properties" ] && cp mobile/android/gradle.properties android/
+            [ -f "mobile/android/app/src/main/AndroidManifest.xml" ] && mkdir -p android/app/src/main && cp mobile/android/app/src/main/AndroidManifest.xml android/app/src/main/
+          fi
+          echo "✅ Android configuration restored"
+
       - name: Update Android Gradle Configuration
         run: |
           # Ensure gradle.properties has correct settings
@@ -84,7 +98,17 @@ jobs:
       - name: Clean Build Artifacts
         run: flutter clean
 
-      
+      - name: Setup Local Properties
+        run: |
+          if [ -z "$ANDROID_SDK_ROOT" ]; then
+            export ANDROID_SDK_ROOT=$ANDROID_HOME
+          fi
+          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+          echo "flutter.sdk=$FLUTTER_HOME" >> android/local.properties
+          echo "flutter.versionCode=1" >> android/local.properties
+          echo "flutter.versionName=1.0.0" >> android/local.properties
+          echo "✅ local.properties configured"
+          cat android/local.properties
       - name: Generate Launcher Icons
         run: |
           if [ -f "assets/icon.png" ]; then
@@ -98,6 +122,16 @@ jobs:
             flutter pub run flutter_launcher_icons
             echo "✅ Generated launcher icons from default image"
           fi
+
+      - name: Verify Android Configuration
+        run: |
+          echo "📋 Checking Android build configuration..."
+          echo "🔍 build.gradle (app):"
+          head -20 android/app/build.gradle | grep -E "namespace|compileSdkVersion|targetSdkVersion" || echo "⚠️ Missing expected properties"
+          echo "🔍 gradle.properties:"
+          grep -E "useAndroidX|enableJetifier|compileSdkVersion" android/gradle.properties || echo "⚠️ Missing properties"
+          echo "🔍 AndroidManifest.xml:"
+          grep "INTERNET" android/app/src/main/AndroidManifest.xml && echo "✅ INTERNET permission found" || echo "⚠️ INTERNET permission missing"
 
       - name: Build APK (Release)
         run: flutter build apk --release --no-tree-shake-icons 2>&1 | tee build.log
