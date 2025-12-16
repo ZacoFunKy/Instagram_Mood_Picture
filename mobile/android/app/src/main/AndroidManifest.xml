@@ -6,10 +6,12 @@
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 
     <application
-        android:label="Mood">
+        android:label="Mood"
+        android:name="${applicationName}">
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -17,14 +19,4 @@
         </activity>
         <meta-data android:name="flutterEmbedding" android:value="2" />
     </application>
-</manifest>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- REQUIRED: Internet permission for MongoDB connectivity -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    
-    <!-- Activity recognition for pedometer -->
-    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
-    
-    <!-- Network connectivity check -->
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 </manifest>
