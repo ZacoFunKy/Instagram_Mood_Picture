@@ -39,12 +39,11 @@ jobs:
 
       - name: Create .env config
         run: |
-          echo "MONGO_URI=${{ secrets.MONGODB_URI }}" > .env
-          echo "MONGO_URI_MOBILE=${{ secrets.MONGO_URI_MOBILE }}" >> .env
-          echo "COLLECTION_NAME=overrides" >> .env
-          # Copy to mobile directory for Flutter app
-          cp .env mobile/.env
-          echo "✅ .env created in root and mobile/ directories"
+          echo "MONGO_URI=${{ secrets.MONGODB_URI }}" > mobile/.env
+          echo "MONGO_URI_MOBILE=${{ secrets.MONGO_URI_MOBILE }}" >> mobile/.env
+          echo "COLLECTION_NAME=overrides" >> mobile/.env
+          echo "✅ .env created in mobile/ directory"
+          cat mobile/.env
         # Note: MONGO_URI for history (daily_logs), MONGO_URI_MOBILE for overrides
 
       - name: Setup Android Local Properties
