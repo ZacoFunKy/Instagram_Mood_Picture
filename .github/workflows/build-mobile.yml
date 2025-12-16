@@ -37,6 +37,9 @@ jobs:
           echo "COLLECTION_NAME=overrides" >> .env
         # Note: We reuse MONGO_URI if generic, or user can add MONGO_URI_MOBILE
 
+      - name: Generate Android Project
+        run: flutter create .
+
       - name: Install Dependencies
         run: flutter pub get
 
