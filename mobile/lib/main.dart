@@ -305,10 +305,12 @@ class _InputScreenState extends State<InputScreen> {
       }
     } on SocketException catch (e) {
       debugPrint("🌐 Network Error (Sync): $e");
-      if (!silent) _showError("Mode Hors-ligne : Connexion impossible");
+      if (!silent) _showError("Erreur Réseau: ${e.message}");
     } catch (e) {
+      debugPrint("❌ Sync Error: $e");
       if (!silent)
-        _showError("Erreur de sync: ${e.toString().split(':').first}");
+        _showError(
+            "Erreur: ${e.toString().replaceAll('ConnectionException', '')}");
     } finally {
       await db?.close();
       if (mounted && !silent) setState(() => _isSyncing = false);

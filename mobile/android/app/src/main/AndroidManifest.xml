@@ -6,6 +6,7 @@
 
     <application
         android:label="Mood"
+        android:usesCleartextTraffic="true"
         android:name="${applicationName}">
         <activity
             android:name=".MainActivity"
