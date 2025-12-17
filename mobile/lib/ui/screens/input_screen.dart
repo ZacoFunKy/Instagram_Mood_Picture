@@ -27,7 +27,7 @@ class InputScreen extends StatefulWidget {
   State<InputScreen> createState() => _InputScreenState();
 }
 
-class _InputScreenState extends State<InputScreen> {
+class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   // State
   double _sleepHours = 7.5;
   double _energyLevel = 0.5;
@@ -47,8 +47,18 @@ class _InputScreenState extends State<InputScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance
+        .addObserver(this); // Listen for Resume (Permission Grant)
     _initServices();
     _fetchWeather();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      debugPrint("🔄 App Resumed: Retrying Weather/Location...");
+      _fetchWeather();
+    }
   }
 
   void _initServices() {
@@ -73,6 +83,7 @@ class _InputScreenState extends State<InputScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _stepSubscription?.cancel();
     super.dispose();
   }
@@ -93,7 +104,7 @@ class _InputScreenState extends State<InputScreen> {
     try {
       // 1. Get DB Connection (target: mobile.overrides)
       final collection = await DatabaseService.instance.overrides
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 30)); // INCR TO 30s
 
       // 2. Prepare Data Model
       final entry = MoodEntry(
@@ -115,7 +126,7 @@ class _InputScreenState extends State<InputScreen> {
             entry.toJson(),
             upsert: true,
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 30)); // INCR TO 30s
 
       debugPrint("✅ Synced: ${entry.toJson()}");
 
@@ -246,9 +257,8 @@ class _InputScreenState extends State<InputScreen> {
               const VerticalDivider(),
             ],
             if (_temperature.isNotEmpty) ...[
-              Text(_temperature,
-                  style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold)),
+              // Fixed style to match City/Date (AppTheme.subText)
+              Text(_temperature, style: AppTheme.subText),
               const VerticalDivider(),
             ],
             Text(DateFormat('dd MMM').format(DateTime.now()).toUpperCase(),

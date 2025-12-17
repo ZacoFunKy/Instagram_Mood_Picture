@@ -91,13 +91,13 @@ class DatabaseService {
     try {
       debugPrint("🔌 MongoDB: Connecting to $uriString");
       _db = await mongo.Db.create(uriString);
-      // Increased timeout to 10s to allow for slower networks
-      await _db!.open().timeout(const Duration(seconds: 10));
+      // Increased timeout to 30s to allow for slower networks
+      await _db!.open().timeout(const Duration(seconds: 30));
 
       if (mobileUriString != null) {
         debugPrint("🔌 MongoDB (Mobile): Connecting...");
         _mobileDb = await mongo.Db.create(mobileUriString);
-        await _mobileDb!.open().timeout(const Duration(seconds: 10));
+        await _mobileDb!.open().timeout(const Duration(seconds: 30));
       }
 
       _isConnected = true;

@@ -9,7 +9,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
-    await dotenv.load(fileName: "assets/.env");
+    await dotenv.load(fileName: ".env");
   } catch (e) {
     debugPrint("Warning: Config file not found: $e");
   }
