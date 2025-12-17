@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
@@ -82,7 +83,6 @@ class _InputScreenState extends State<InputScreen> {
 
     try {
       // 1. Get DB Connection
-      final db = await DatabaseService.instance.database;
       final collection = await DatabaseService.instance.logsCollection;
 
       // 2. Prepare Data Model
