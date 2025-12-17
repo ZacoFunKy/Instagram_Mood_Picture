@@ -8,6 +8,7 @@
 
     <application
         android:label="Mood"
+        android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"
         android:name="${applicationName}"
         android:theme="@style/LaunchTheme">
