@@ -7,12 +7,13 @@ class NeonBtn extends StatelessWidget {
   final Color color;
   final bool isLoading;
 
-  const NeonBtn(
-      {super.key,
-      required this.onTap,
-      required this.text,
-      required this.color,
-      this.isLoading = false});
+  const NeonBtn({
+    super.key,
+    required this.onTap,
+    required this.text,
+    required this.color,
+    this.isLoading = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -22,28 +23,33 @@ class NeonBtn extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(30),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.4),
+              color: color.withOpacity(0.5),
               blurRadius: 20,
+              spreadRadius: 2,
               offset: const Offset(0, 4),
-            )
+            ),
           ],
         ),
         child: Center(
           child: isLoading
               ? const SizedBox(
-                  height: 20,
                   width: 20,
+                  height: 20,
                   child: CircularProgressIndicator(
-                      color: Colors.white, strokeWidth: 2))
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                  ),
+                )
               : Text(
                   text,
                   style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16),
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                    letterSpacing: 1.5,
+                  ),
                 ),
         ),
       ),

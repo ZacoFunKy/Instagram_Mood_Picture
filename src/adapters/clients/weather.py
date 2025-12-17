@@ -3,22 +3,30 @@ Weather forecast module for Bordeaux using Open-Meteo API.
 
 Provides human-readable weather summaries with WMO weather code interpretation.
 This module runs at 3am UTC, returning a forecast for the upcoming day (not real-time).
+It attempts to use the User's last known location from the database, falling back to Bordeaux.
 """
 
 import logging
+import os
 from enum import IntEnum
-from typing import Optional, Tuple, Dict, Any, Union
+from typing import Optional, Tuple, Dict, Any
 from dataclasses import dataclass
 
 import requests
+import pymongo
+from dotenv import load_dotenv
+from geopy.geocoders import Nominatim
+
+# Load Env for DB
+load_dotenv(dotenv_path="assets/.env")
 
 # ============================================================================
 # CONSTANTS & CONFIGURATION
 # ============================================================================
 
-# Bordeaux Coordinates (France)
-BORDEAUX_LATITUDE = 44.8404
-BORDEAUX_LONGITUDE = -0.5805
+# Bordeaux Coordinates (France) - DEFAULT
+DEFAULT_LATITUDE = 44.8404
+DEFAULT_LONGITUDE = -0.5805
 TIMEZONE = "Europe/Paris"
 
 # Open-Meteo API
@@ -91,10 +99,11 @@ class WeatherData:
     min_temp: float         # Minimum temperature in Celsius
     max_temp: float         # Maximum temperature in Celsius
     wmo_code: int           # Raw WMO code
+    location_name: str      # City name
 
     def __str__(self) -> str:
         """Returns human-readable summary."""
-        return f"Meteo Bordeaux: {self.condition}, Min {self.min_temp}C, Max {self.max_temp}C."
+        return f"Meteo {self.location_name}: {self.condition}, Min {self.min_temp}C, Max {self.max_temp}C."
 
     def to_tuple(self) -> Tuple[str, Dict[str, Any]]:
         """Returns summary string and metadata dict."""
@@ -103,7 +112,8 @@ class WeatherData:
             "condition_code": self.condition_code.value,
             "temp_min": self.min_temp,
             "temp_max": self.max_temp,
-            "wmo_code": self.wmo_code
+            "wmo_code": self.wmo_code,
+            "location": self.location_name
         }
         return str(self), metadata
 
@@ -162,31 +172,78 @@ class WMOInterpreter:
 
 
 # ============================================================================
+# LOCATION SERVICE
+# ============================================================================
+
+def get_target_location() -> Tuple[float, float, str]:
+    """
+    Determines which location to use for weather.
+    Priority:
+    1. Last known location from 'daily_logs' in Database (within last 5 days).
+    2. Default: Bordeaux.
+
+    Returns:
+        Tuple (latitude, longitude, city_name)
+    """
+    mongo_uri = os.getenv("MONGO_URI")
+    if not mongo_uri:
+        logger.warning("MONGO_URI not set. Using Default (Bordeaux).")
+        return DEFAULT_LATITUDE, DEFAULT_LONGITUDE, "Bordeaux"
+
+    try:
+        client = pymongo.MongoClient(mongo_uri)
+        db = client.get_database() # Uses DB from URI
+        
+        # Check 'daily_logs' for recent location
+        collection = db['daily_logs']
+        # Find last entry with 'location' field
+        last_entry = collection.find_one(
+            {"location": {"$exists": True, "$ne": None}, "date": {"$exists": True}},
+            sort=[("date", -1)]
+        )
+
+        if last_entry and "location" in last_entry:
+             city = last_entry["location"]
+             logger.info(f"Found recent location in DB: {city}")
+             
+             # Geocode City Name -> Lat/Lon
+             geolocator = Nominatim(user_agent="mood_predictor_bot")
+             location = geolocator.geocode(city)
+             
+             if location:
+                 return location.latitude, location.longitude, city
+             else:
+                 logger.warning(f"Could not geocode city '{city}'. Using Default.")
+
+    except Exception as e:
+        logger.error(f"Error fetching location from DB: {e}. Using Default.")
+
+    return DEFAULT_LATITUDE, DEFAULT_LONGITUDE, "Bordeaux"
+
+
+# ============================================================================
 # API INTERACTION
 # ============================================================================
 
 class WeatherAPIClient:
     """Handles Open-Meteo API interactions."""
 
-    def __init__(self, latitude: float = BORDEAUX_LATITUDE,
-                 longitude: float = BORDEAUX_LONGITUDE,
-                 timezone: str = TIMEZONE,
-                 timeout: int = REQUEST_TIMEOUT) -> None:
-        self.latitude = latitude
-        self.longitude = longitude
-        self.timezone = timezone
-        self.timeout = timeout
+    def __init__(self) -> None:
+        pass # Lat/Lon fetched per request now
 
     def fetch_daily_forecast(self) -> Optional[WeatherData]:
         """
         Fetches daily weather forecast from Open-Meteo API.
         The script runs at 3am, so this returns the forecast for the upcoming day.
         """
+        
+        lat, lon, city = get_target_location()
+        
         params = {
-            "latitude": self.latitude,
-            "longitude": self.longitude,
+            "latitude": lat,
+            "longitude": lon,
             "daily": "weather_code,temperature_2m_max,temperature_2m_min",
-            "timezone": self.timezone,
+            "timezone": TIMEZONE,
             "forecast_days": 1
         }
 
@@ -194,27 +251,18 @@ class WeatherAPIClient:
             response = requests.get(
                 API_URL,
                 params=params,
-                timeout=self.timeout
+                timeout=REQUEST_TIMEOUT
             )
             response.raise_for_status()
             data = response.json()
 
-            return self._parse_forecast(data)
+            return self._parse_forecast(data, city)
 
-        except requests.exceptions.Timeout:
-            logger.error(f"Weather API timeout after {self.timeout}s")
-            return None
-        except requests.exceptions.ConnectionError as e:
-            logger.error(f"Weather API connection error: {e}")
-            return None
-        except requests.exceptions.HTTPError as e:
-            logger.error(f"Weather API HTTP error: {e}")
-            return None
         except Exception as e:
             logger.error(f"Unexpected error fetching weather: {e}")
             return None
 
-    def _parse_forecast(self, api_data: Dict[str, Any]) -> Optional[WeatherData]:
+    def _parse_forecast(self, api_data: Dict[str, Any], city: str) -> Optional[WeatherData]:
         """Parses Open-Meteo API response."""
         try:
             daily = api_data.get("daily", {})
@@ -237,7 +285,8 @@ class WeatherAPIClient:
                 condition_code=condition,
                 min_temp=float(min_temp) if min_temp != "?" else 0.0,
                 max_temp=float(max_temp) if max_temp != "?" else 0.0,
-                wmo_code=int(wmo_code)
+                wmo_code=int(wmo_code),
+                location_name=city
             )
 
         except (KeyError, IndexError, ValueError) as e:
@@ -251,7 +300,7 @@ class WeatherAPIClient:
 
 def get_bordeaux_weather() -> str:
     """
-    Fetches daily weather forecast for Bordeaux.
+    Fetches daily weather forecast (auto-location or Bordeaux).
     Returns: Human-readable weather summary string.
     """
     client = WeatherAPIClient()

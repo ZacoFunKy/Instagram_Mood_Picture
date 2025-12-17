@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+
 import '../widgets/glass_card.dart';
 import 'input_screen.dart';
 import 'history_screen.dart';
 import 'stats_screen.dart';
+import '../../utils/app_theme.dart';
 
 class MainScaffold extends StatefulWidget {
   const MainScaffold({super.key});
@@ -70,7 +72,7 @@ class _MainScaffoldState extends State<MainScaffold> {
         ),
         child: Icon(
           isSelected ? activeIcon : icon,
-          color: isSelected ? const Color(0xFF00FF9D) : Colors.white54,
+          color: isSelected ? AppTheme.neonGreen : Colors.white54,
           size: 28,
         ),
       ),
