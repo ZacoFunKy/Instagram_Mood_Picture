@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert'; // For API JSON
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
@@ -13,6 +14,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'dart:ui'; // For BackdropFilter
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:geolocator/geolocator.dart'; // For Location
+import 'package:http/http.dart' as http; // For Weather API
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -147,6 +150,8 @@ class _InputScreenState extends State<InputScreen> {
 
   bool _isSyncing = false;
   bool _syncSuccess = false;
+  String _temperature = ""; // Store temp
+  bool _weatherLoading = false;
 
   // Step Counting
   int _stepCount = 0;
@@ -160,6 +165,7 @@ class _InputScreenState extends State<InputScreen> {
     _initPedometer();
     _startAutoSync();
     _startStepRefresh();
+    _fetchWeather(); // Fetch weather on init
   }
 
   @override
@@ -305,15 +311,60 @@ class _InputScreenState extends State<InputScreen> {
       }
     } on SocketException catch (e) {
       debugPrint("🌐 Network Error (Sync): $e");
-      if (!silent) _showError("Erreur Réseau: ${e.message}");
+      if (!silent)
+        _showError("Erreur Réseau: Impossible de joindre le serveur");
     } catch (e) {
       debugPrint("❌ Sync Error: $e");
       if (!silent)
         _showError(
-            "Erreur: ${e.toString().replaceAll('ConnectionException', '')}");
+            "Erreur: ${e.toString().replaceAll('ConnectionException', 'Problème de connexion')}");
+      // Force UI reset just in case
+      if (mounted) setState(() => _isSyncing = false);
     } finally {
       await db?.close();
       if (mounted && !silent) setState(() => _isSyncing = false);
+    }
+  }
+
+  // --- WEATHER ---
+  Future<void> _fetchWeather() async {
+    if (!mounted) return;
+    setState(() => _weatherLoading = true);
+
+    try {
+      // 1. Check/Request Permissions
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          debugPrint("🚫 Location permission denied");
+          setState(() => _temperature = "-");
+          return;
+        }
+      }
+
+      // 2. Get Position
+      Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.low);
+
+      // 3. Build API URL (Open-Meteo is free/no-key)
+      final url = Uri.parse(
+          "https://api.open-meteo.com/v1/forecast?latitude=${position.latitude}&longitude=${position.longitude}&current=temperature_2m");
+
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final temp = data['current']['temperature_2m'];
+        final unit = data['current_units']['temperature_2m'] ?? "°C";
+        setState(() => _temperature = "${temp.round()}$unit");
+      } else {
+        debugPrint("API Error: ${response.statusCode}");
+      }
+    } catch (e) {
+      debugPrint("❌ Weather Error: $e");
+    } finally {
+      if (mounted) setState(() => _weatherLoading = false);
     }
   }
 
@@ -439,6 +490,7 @@ class _InputScreenState extends State<InputScreen> {
                 isLoading: _isSyncing,
                 onTap: _syncToBrain,
               ).animate().fadeIn(delay: 600.ms).scale(),
+              const SizedBox(height: 100), // ADDED PADDING FOR FAB
             ],
           ),
         ),
@@ -455,13 +507,28 @@ class _InputScreenState extends State<InputScreen> {
                 fontWeight: FontWeight.w900,
                 fontSize: 32,
                 letterSpacing: -1.5)),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-              color: Colors.white10, borderRadius: BorderRadius.circular(20)),
-          child: Text(DateFormat('dd MMM').format(DateTime.now()).toUpperCase(),
-              style:
-                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+        Row(
+          children: [
+            if (_temperature.isNotEmpty && _temperature != "-")
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: Text(_temperature,
+                    style: GoogleFonts.inter(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: Colors.white70)),
+              ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                  color: Colors.white10,
+                  borderRadius: BorderRadius.circular(20)),
+              child: Text(
+                  DateFormat('dd MMM').format(DateTime.now()).toUpperCase(),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 12)),
+            ),
+          ],
         ),
       ],
     );
@@ -636,9 +703,20 @@ class _HistoryScreenState extends State<HistoryScreen> {
     } on SocketException catch (e) {
       debugPrint("🌐 SOCKET ERROR: $e");
       if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     } catch (e) {
       debugPrint("❌ Error fetching history: $e");
-      if (mounted) setState(() => _isLoading = false);
+      // SHOW ERROR TO USER
+      if (mounted) {
+        try {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text("History Error: $e"),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ));
+        } catch (_) {}
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -850,9 +928,20 @@ class _StatsScreenState extends State<StatsScreen> {
     } on SocketException catch (e) {
       debugPrint("🌐 STATS NETWORK ERROR: $e");
       if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     } catch (e) {
       debugPrint("❌ Error fetching stats: $e");
-      if (mounted) setState(() => _isLoading = false);
+      // SHOW ERROR TO USER
+      if (mounted) {
+        try {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text("Stats Error: $e"),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ));
+        } catch (_) {}
+        setState(() => _isLoading = false);
+      }
     }
   }
 
