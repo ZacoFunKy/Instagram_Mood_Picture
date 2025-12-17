@@ -143,7 +143,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  _formatDate(entry.date),
+                  _formatDate(entry),
                   style: AppTheme.subText.copyWith(fontSize: 12),
                 ),
                 if (entry.moodSelected != null)
@@ -159,12 +159,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 _metricPill("💤 ${entry.sleepHours}h"),
-                _metricPill("⚡ ${(entry.energy * 100).toInt()}%"),
-                _metricPill("🧠 ${(entry.stress * 100).toInt()}%"),
+                if (entry.energy != null)
+                  _metricPill("⚡ ${(entry.energy! * 100).toInt()}%"),
+                if (entry.stress != null)
+                  _metricPill("🧠 ${(entry.stress! * 100).toInt()}%"),
+                if (entry.social != null)
+                  _metricPill("💬 ${(entry.social! * 100).toInt()}%"),
                 _metricPill("👟 ${entry.steps}"),
               ],
             )
@@ -188,12 +193,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  String _formatDate(String dateStr) {
+  String _formatDate(MoodEntry entry) {
     try {
-      final date = DateTime.parse(dateStr);
-      return DateFormat('EEEE d MMMM').format(date).toUpperCase();
+      final date = DateTime.parse(entry.date);
+      String dayStr = DateFormat('EEEE d MMMM').format(date).toUpperCase();
+      
+      // Determine Time of Day
+      String timeOfDay = "JOURNÉE";
+      int hour = entry.lastUpdated.hour;
+      else if (hour < 18)
+        timeOfDay = "APRÈS-MIDI";
+      else
+        timeOfDay = "SOIR";
+
+      return "$dayStr • $timeOfDay";
     } catch (_) {
-      return dateStr;
+      return entry.date;
     }
   }
 }

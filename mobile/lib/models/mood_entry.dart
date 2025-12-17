@@ -1,9 +1,9 @@
 class MoodEntry {
   final String date;
   final double sleepHours;
-  final double energy;
-  final double stress;
-  final double social;
+  final double? energy;
+  final double? stress;
+  final double? social;
   final int steps;
   final String? location;
   final DateTime lastUpdated;
@@ -13,9 +13,9 @@ class MoodEntry {
   const MoodEntry({
     required this.date,
     required this.sleepHours,
-    required this.energy,
-    required this.stress,
-    required this.social,
+    this.energy,
+    this.stress,
+    this.social,
     required this.steps,
     this.location,
     required this.lastUpdated,
@@ -28,9 +28,9 @@ class MoodEntry {
     return MoodEntry(
       date: json['date'] as String,
       sleepHours: (json['sleep_hours'] as num?)?.toDouble() ?? 0.0,
-      energy: (json['feedback_energy'] as num?)?.toDouble() ?? 0.5,
-      stress: (json['feedback_stress'] as num?)?.toDouble() ?? 0.5,
-      social: (json['feedback_social'] as num?)?.toDouble() ?? 0.5,
+      energy: (json['feedback_energy'] as num?)?.toDouble(), // Nullable
+      stress: (json['feedback_stress'] as num?)?.toDouble(), // Nullable
+      social: (json['feedback_social'] as num?)?.toDouble(), // Nullable
       steps: (json['steps_count'] as num?)?.toInt() ?? 0,
       location: json['location'] as String?,
       lastUpdated: json['last_updated'] != null
@@ -53,8 +53,6 @@ class MoodEntry {
       "location": location,
       "last_updated": lastUpdated.toIso8601String(),
       "device": device,
-      // 'mood_selected' is usually written by backend, but if we needed to write it:
-      // "mood_selected": moodSelected,
     };
   }
 
@@ -63,12 +61,36 @@ class MoodEntry {
     return MoodEntry(
       date: "",
       sleepHours: 7.0,
-      energy: 0.5,
-      stress: 0.5,
-      social: 0.5,
       steps: 0,
       lastUpdated: DateTime.now(),
       device: "unknown",
+    );
+  }
+
+  // CopyWith helper (needed for StatsScreen merge logic)
+  MoodEntry copyWith({
+    String? date,
+    double? sleepHours,
+    double? energy,
+    double? stress,
+    double? social,
+    int? steps,
+    String? location,
+    DateTime? lastUpdated,
+    String? device,
+    String? moodSelected,
+  }) {
+    return MoodEntry(
+      date: date ?? this.date,
+      sleepHours: sleepHours ?? this.sleepHours,
+      energy: energy ?? this.energy,
+      stress: stress ?? this.stress,
+      social: social ?? this.social,
+      steps: steps ?? this.steps,
+      location: location ?? this.location,
+      lastUpdated: lastUpdated ?? this.lastUpdated,
+      device: device ?? this.device,
+      moodSelected: moodSelected ?? this.moodSelected,
     );
   }
 }

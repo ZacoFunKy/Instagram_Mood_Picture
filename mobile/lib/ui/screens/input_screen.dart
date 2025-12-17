@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
 import 'package:sleek_circular_slider/sleek_circular_slider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/mood_entry.dart';
 import '../../services/database_service.dart';
@@ -47,10 +48,37 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance
-        .addObserver(this); // Listen for Resume (Permission Grant)
+    WidgetsBinding.instance.addObserver(this);
     _initServices();
     _fetchWeather();
+    _checkTodayData(); // Check persistence
+  }
+
+  /// Check if we already have data for today in the database
+  Future<void> _checkTodayData() async {
+    try {
+      final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      // Short timeout for UI initialization
+      final collection = await DatabaseService.instance.overrides
+          .timeout(const Duration(seconds: 5));
+
+      final doc = await collection.findOne(mongo.where.eq('date', dateStr));
+      if (doc != null) {
+        final entry = MoodEntry.fromJson(doc);
+        if (mounted) {
+          setState(() {
+            _sleepHours = entry.sleepHours;
+            // Restore sliders (use default if null, though DB usually has values)
+            _energyLevel = entry.energy ?? 0.5;
+            _stressLevel = entry.stress ?? 0.5;
+            _socialLevel = entry.social ?? 0.5;
+          });
+          debugPrint("✅ Persistence: Restored today's values");
+        }
+      }
+    } catch (e) {
+      debugPrint("ℹ️ No previous data for today or offline: $e");
+    }
   }
 
   @override
@@ -58,6 +86,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       debugPrint("🔄 App Resumed: Retrying Weather/Location...");
       _fetchWeather();
+      _checkTodayData(); // Re-check in case background sync happened
     }
   }
 
@@ -66,19 +95,20 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     PedometerService.instance.init();
 
     // Listen to steps
-    _stepSubscription = PedometerService.instance.stepStream.listen((steps) {
+    _stepSubscription =
+        PedometerService.instance.stepStream.listen((steps) async {
       if (mounted) {
         setState(() => _currentSteps = steps);
       }
+      // Cache for background service
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('last_known_steps', steps);
     });
 
     // Load initial value immediately
     setState(() {
       _currentSteps = PedometerService.instance.currentSteps;
     });
-
-    // Auto-sync timer could be here, or in the service.
-    // Keeping UI specific logic here for now.
   }
 
   @override
@@ -104,7 +134,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     try {
       // 1. Get DB Connection (target: mobile.overrides)
       final collection = await DatabaseService.instance.overrides
-          .timeout(const Duration(seconds: 30)); // INCR TO 30s
+          .timeout(const Duration(seconds: 30));
 
       // 2. Prepare Data Model
       final entry = MoodEntry(
@@ -126,7 +156,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
             entry.toJson(),
             upsert: true,
           )
-          .timeout(const Duration(seconds: 30)); // INCR TO 30s
+          .timeout(const Duration(seconds: 30));
 
       debugPrint("✅ Synced: ${entry.toJson()}");
 
@@ -137,6 +167,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
             _syncSuccess = true;
             _isSyncing = false;
           });
+          _showSuccessDialog(); // New Pop-up
+
           Future.delayed(const Duration(seconds: 2), () {
             if (mounted) setState(() => _syncSuccess = false);
           });
@@ -151,6 +183,43 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
       if (!silent) _showError("Sync Failed: Check Internet");
       if (mounted) setState(() => _isSyncing = false);
     }
+  }
+
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Center(
+        child: GlassCard(
+          padding: const EdgeInsets.all(32),
+          borderRadius: BorderRadius.circular(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonGreen.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.check,
+                    color: AppTheme.neonGreen, size: 48),
+              ).animate().scale(curve: Curves.elasticOut, duration: 600.ms),
+              const SizedBox(height: 24),
+              Text(
+                "DATA SYNCED",
+                style: AppTheme.headerLarge.copyWith(fontSize: 24),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Your mood data is safe.",
+                style: AppTheme.subText,
+              ),
+            ],
+          ),
+        ),
+      ).animate().fadeIn().scale(),
+    );
   }
 
   Future<void> _fetchWeather() async {

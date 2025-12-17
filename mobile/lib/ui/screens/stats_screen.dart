@@ -42,16 +42,51 @@ class _StatsScreenState extends State<StatsScreen> {
     });
 
     try {
-      // Stats reads from profile_predictor.daily_logs
-      final collection = await DatabaseService.instance.dailyLogs
+      // 1. Fetch History (Processed Data)
+      final dailyLogsCol = await DatabaseService.instance.dailyLogs
           .timeout(const Duration(seconds: 15));
-
-      // Fetch last 30 days for robust stats
-      final logs = await collection
+      final historyDocs = await dailyLogsCol
           .find(mongo.where.sortBy('date', descending: true).limit(30))
           .toList();
 
-      final entries = logs.map((e) => MoodEntry.fromJson(e)).toList();
+      // 2. Fetch Local Overrides (Pending Data)
+      final overridesCol = await DatabaseService.instance.overrides
+          .timeout(const Duration(seconds: 15));
+      final overrideDocs = await overridesCol
+          .find(mongo.where.sortBy('date', descending: true).limit(7))
+          .toList();
+
+      // 3. Merge Strategies
+      // We want to overlay overrides onto history because overrides are "latest user input"
+      // that might not be processed yet.
+      Map<String, MoodEntry> mergedMap = {};
+
+      // Fill with history first
+      for (var doc in historyDocs) {
+        final entry = MoodEntry.fromJson(doc);
+        mergedMap[entry.date] = entry;
+      }
+
+      // Overlay overrides (local precedence for Sleep/Steps/etc)
+      for (var doc in overrideDocs) {
+        final entry = MoodEntry.fromJson(doc);
+        // If entry exists, we might want to keep the 'moodSelected' from history
+        // but update metrics from override.
+        if (mergedMap.containsKey(entry.date)) {
+          final existing = mergedMap[entry.date]!;
+          mergedMap[entry.date] = entry.copyWith(
+            moodSelected:
+                existing.moodSelected, // Keep predicted mood if exists
+          );
+        } else {
+          mergedMap[entry.date] = entry;
+        }
+      }
+
+      // Flatten back to list
+      final entries = mergedMap.values.toList();
+      // Sort Descending (Newest First)
+      entries.sort((a, b) => b.date.compareTo(a.date));
 
       if (entries.isEmpty) {
         if (mounted) setState(() => _isLoading = false);
@@ -84,19 +119,25 @@ class _StatsScreenState extends State<StatsScreen> {
     if (entries.isEmpty) return;
 
     double totalSleep = 0;
-    double totalEnergy = 0;
-    double totalStress = 0;
+    List<double> energyValues = [];
+    List<double> stressValues = [];
 
     for (var e in entries) {
       totalSleep += e.sleepHours;
-      totalEnergy += e.energy;
-      totalStress += e.stress;
+      if (e.energy != null) energyValues.add(e.energy!);
+      if (e.stress != null) stressValues.add(e.stress!);
     }
 
     int count = entries.length;
     _avgSleep = "${(totalSleep / count).toStringAsFixed(1)}h";
-    _avgEnergy = "${((totalEnergy / count) * 100).toInt()}%";
-    _avgStress = "${((totalStress / count) * 100).toInt()}%";
+
+    _avgEnergy = energyValues.isEmpty
+        ? "-"
+        : "${((energyValues.reduce((a, b) => a + b) / energyValues.length) * 100).toInt()}%";
+
+    _avgStress = stressValues.isEmpty
+        ? "-"
+        : "${((stressValues.reduce((a, b) => a + b) / stressValues.length) * 100).toInt()}%";
   }
 
   void _calculateMoodDistribution(List<MoodEntry> entries) {
