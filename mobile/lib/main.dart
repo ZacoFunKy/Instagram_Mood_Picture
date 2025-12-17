@@ -10,6 +10,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:pedometer/pedometer.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'dart:ui'; // For BackdropFilter
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
@@ -73,33 +75,53 @@ class _MainScaffoldState extends State<MainScaffold> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
+      extendBody: true,
+      body: Stack(
+        children: [
+          _screens[_currentIndex],
+          Positioned(
+            left: 20,
+            right: 20,
+            bottom: 20,
+            child: GlassCard(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              borderRadius: BorderRadius.circular(32),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _navItem(0, Icons.add_circle_outline_rounded,
+                      Icons.add_circle_rounded),
+                  _navItem(1, Icons.history_rounded, Icons.history_rounded),
+                  _navItem(2, Icons.bar_chart_rounded, Icons.bar_chart_rounded),
+                ],
+              ),
+            ).animate().slideY(
+                begin: 1, end: 0, duration: 600.ms, curve: Curves.easeOutBack),
+          ),
+        ],
       ),
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: Colors.white10)),
+    );
+  }
+
+  Widget _navItem(int index, IconData icon, IconData activeIcon) {
+    bool isSelected = _currentIndex == index;
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        setState(() => _currentIndex = index);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color:
+              isSelected ? Colors.white.withOpacity(0.1) : Colors.transparent,
+          shape: BoxShape.circle,
         ),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (index) => setState(() => _currentIndex = index),
-          backgroundColor: Colors.black,
-          selectedItemColor: const Color(0xFF00FF9D),
-          unselectedItemColor: Colors.white38,
-          showSelectedLabels: false,
-          showUnselectedLabels: false,
-          type: BottomNavigationBarType.fixed,
-          items: const [
-            BottomNavigationBarItem(
-                icon: Icon(Icons.add_circle_outline_rounded),
-                activeIcon: Icon(Icons.add_circle_rounded),
-                label: 'Input'),
-            BottomNavigationBarItem(
-                icon: Icon(Icons.history_rounded), label: 'History'),
-            BottomNavigationBarItem(
-                icon: Icon(Icons.bar_chart_rounded), label: 'Stats'),
-          ],
+        child: Icon(
+          isSelected ? activeIcon : icon,
+          color: isSelected ? const Color(0xFF00FF9D) : Colors.white54,
+          size: 28,
         ),
       ),
     );
@@ -128,7 +150,6 @@ class _InputScreenState extends State<InputScreen> {
 
   // Step Counting
   int _stepCount = 0;
-  int _stepCountAtMidnight = 0; // Reference point for today's count
   StreamSubscription<StepCount>? _stepCountStream;
   Timer? _autoSyncTimer;
   Timer? _stepRefreshTimer;
@@ -158,26 +179,23 @@ class _InputScreenState extends State<InputScreen> {
   }
 
   Future<void> _checkMidnightReset() async {
-    // Reset step count at midnight for new day
     DateTime now = DateTime.now();
     final today = DateFormat('yyyy-MM-dd').format(now);
     final prefs = await SharedPreferences.getInstance();
     final savedDate = prefs.getString('step_date');
 
     if (savedDate != today) {
-      // New day detected, reset counter
-      debugPrint("📅 New day detected, resetting step counter");
+      debugPrint("📅 New day detected ($today), resetting daily steps");
       setState(() {
-        _stepCountAtMidnight =
-            0; // Will be reinitialized on next pedometer event
+        _stepCount = 0;
       });
       await prefs.setString('step_date', today);
-      await prefs.remove('step_midnight');
+      await prefs.setInt('daily_steps_accumulated', 0);
+      // We don't reset 'last_sensor_value' here, as it's just a reference for deltas
     }
   }
 
   void _startAutoSync() {
-    // Auto-sync every 2 hours to keep step count fresh
     _autoSyncTimer = Timer.periodic(const Duration(hours: 2), (timer) {
       if (_stepCount > 0) {
         debugPrint("🔄 Auto-syncing step count: $_stepCount");
@@ -187,57 +205,53 @@ class _InputScreenState extends State<InputScreen> {
   }
 
   Future<void> _initPedometer() async {
-    // Request permission
     final status = await Permission.activityRecognition.request();
-    if (!status.isGranted) {
-      debugPrint("Activity Recognition permission denied");
-      return;
-    }
+    if (!status.isGranted) return;
 
-    // Load saved midnight reference from SharedPreferences ONCE
     final prefs = await SharedPreferences.getInstance();
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final savedDate = prefs.getString('step_date');
-    final savedMidnight = prefs.getInt('step_midnight') ?? 0;
 
-    // Initialize midnight reference ONCE at startup
-    if (savedDate == today && savedMidnight > 0) {
-      // Same day, restore saved reference
-      _stepCountAtMidnight = savedMidnight;
-      debugPrint(
-          "📅 Step counter restored: midnight=$_stepCountAtMidnight (from saved)");
+    // Initialize/Restore state
+    if (prefs.getString('step_date') != today) {
+      await prefs.setString('step_date', today);
+      await prefs.setInt('daily_steps_accumulated', 0);
     }
-    // If different day or no saved value, it will be initialized on first pedometer event
 
-    // Listen for real-time step count updates
+    // Load persisted daily count
+    _stepCount = prefs.getInt('daily_steps_accumulated') ?? 0;
+    int lastSensorValue = prefs.getInt('last_sensor_value') ?? 0;
+
     _stepCountStream = Pedometer.stepCountStream.listen(
       (StepCount event) async {
-        if (mounted) {
-          // Initialize midnight reference ONLY if not already set
-          if (_stepCountAtMidnight == 0) {
-            _stepCountAtMidnight = event.steps;
-            await prefs.setString('step_date', today);
-            await prefs.setInt('step_midnight', event.steps);
-            debugPrint(
-                "📅 Step counter initialized: midnight=${event.steps} (first time)");
-          }
+        if (!mounted) return;
 
-          setState(() {
-            // Calculate today's steps by subtracting midnight reference
-            _stepCount = event.steps - _stepCountAtMidnight;
-            if (_stepCount < 0) {
-              // Handle phone restart (step counter reset)
-              debugPrint("⚠️ Step counter reset detected, reinitializing");
-              _stepCountAtMidnight = event.steps;
-              _stepCount = 0;
-              prefs.setInt('step_midnight', event.steps);
-            }
-          });
+        int currentSensorValue = event.steps;
+        int delta = 0;
+
+        if (lastSensorValue == 0) {
+          // First install or data wipe: assume 0 delta, just sync baseline
+          lastSensorValue = currentSensorValue;
+        } else if (currentSensorValue < lastSensorValue) {
+          // Reboot detected (sensor reset): delta is the full current value
+          debugPrint(
+              "⚠️ Reboot detected: sensor $lastSensorValue -> $currentSensorValue");
+          delta = currentSensorValue;
+        } else {
+          // Normal update
+          delta = currentSensorValue - lastSensorValue;
+        }
+
+        if (delta > 0) {
+          _stepCount += delta;
+          lastSensorValue = currentSensorValue;
+
+          await prefs.setInt('daily_steps_accumulated', _stepCount);
+          await prefs.setInt('last_sensor_value', lastSensorValue);
+
+          setState(() {});
         }
       },
-      onError: (error) {
-        debugPrint("Pedometer Error: $error");
-      },
+      onError: (e) => debugPrint("Pedometer Error: $e"),
     );
   }
 
@@ -289,10 +303,14 @@ class _InputScreenState extends State<InputScreen> {
           });
         }
       }
+    } on SocketException catch (e) {
+      debugPrint("🌐 Network Error (Sync): $e");
+      if (!silent) _showError("Mode Hors-ligne : Connexion impossible");
     } catch (e) {
-      if (!silent) _showError("Erreur: $e");
+      if (!silent)
+        _showError("Erreur de sync: ${e.toString().split(':').first}");
     } finally {
-      db?.close();
+      await db?.close();
       if (mounted && !silent) setState(() => _isSyncing = false);
     }
   }
@@ -322,51 +340,69 @@ class _InputScreenState extends State<InputScreen> {
               _buildHeader(),
               const SizedBox(height: 40),
               Center(
-                child: SleekCircularSlider(
-                  initialValue: _sleepHours,
-                  min: 0,
-                  max: 12,
-                  appearance: CircularSliderAppearance(
-                    size: 240,
-                    startAngle: 180,
-                    angleRange: 180,
-                    customColors: CustomSliderColors(
-                      progressBarColor: const Color(0xFFBD00FF),
-                      trackColor: Colors.white10,
-                      dotColor: Colors.white,
-                    ),
-                  ),
-                  innerWidget: (double value) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            _formatSleep(value),
-                            style: GoogleFonts.inter(
-                                fontSize: 48,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white,
-                                letterSpacing: -2),
-                          ),
-                          Text("SLEEP DURATION",
-                              style: GoogleFonts.inter(
-                                  color: Colors.white38,
-                                  fontSize: 10,
-                                  letterSpacing: 1.5)),
-                        ],
+                child: Container(
+                  width: 250,
+                  height: 250,
+                  decoration: BoxDecoration(shape: BoxShape.circle, boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFBD00FF).withOpacity(0.2),
+                      blurRadius: 40,
+                      spreadRadius: 10,
+                    )
+                  ]),
+                  child: SleekCircularSlider(
+                    initialValue: _sleepHours,
+                    min: 0,
+                    max: 12,
+                    appearance: CircularSliderAppearance(
+                      size: 240,
+                      startAngle: 180,
+                      angleRange: 180,
+                      customWidths: CustomSliderWidths(
+                          trackWidth: 10,
+                          progressBarWidth: 15,
+                          handlerSize: 10,
+                          shadowWidth: 20),
+                      customColors: CustomSliderColors(
+                        progressBarColor: const Color(0xFFBD00FF),
+                        trackColor: Colors.white10,
+                        dotColor: Colors.white,
+                        shadowColor: const Color(0xFFBD00FF).withOpacity(0.5),
+                        shadowMaxOpacity: 0.5,
                       ),
-                    );
-                  },
-                  onChange: (double value) {
-                    double snapped = (value * 4).round() / 4;
-                    if (snapped != _sleepHours) {
-                      HapticFeedback.selectionClick();
-                      setState(() => _sleepHours = snapped);
-                    }
-                  },
+                    ),
+                    innerWidget: (double value) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _formatSleep(value),
+                              style: GoogleFonts.inter(
+                                  fontSize: 48,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                  letterSpacing: -2),
+                            ),
+                            Text("SLEEP DURATION",
+                                style: GoogleFonts.inter(
+                                    color: Colors.white38,
+                                    fontSize: 10,
+                                    letterSpacing: 1.5)),
+                          ],
+                        ),
+                      );
+                    },
+                    onChange: (double value) {
+                      double snapped = (value * 4).round() / 4;
+                      if (snapped != _sleepHours) {
+                        HapticFeedback.selectionClick();
+                        setState(() => _sleepHours = snapped);
+                      }
+                    },
+                  ),
                 ),
-              ),
+              ).animate().fadeIn(duration: 800.ms).scale(),
               const SizedBox(height: 40),
               _buildLabel("VITAL METRICS"),
               const SizedBox(height: 20),
@@ -387,36 +423,20 @@ class _InputScreenState extends State<InputScreen> {
               const SizedBox(height: 24),
 
               // Step Counter Display
-              _buildStepCounter(),
+              _buildStepCounter()
+                  .animate()
+                  .fadeIn(delay: 400.ms)
+                  .slideY(begin: 0.2, end: 0),
 
               const SizedBox(height: 40),
-              GestureDetector(
-                onTap: !_isSyncing ? _syncToBrain : null,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color:
-                        _syncSuccess ? const Color(0xFF00FF9D) : Colors.white,
-                    borderRadius: BorderRadius.circular(100),
-                  ),
-                  child: Center(
-                    child: _isSyncing
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                                color: Colors.black, strokeWidth: 2))
-                        : Text(
-                            _syncSuccess ? "SYNCED" : "UPDATE MOOD",
-                            style: GoogleFonts.inter(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 14,
-                                color: Colors.black),
-                          ),
-                  ),
-                ),
-              ),
+              NeonBtn(
+                text: _syncSuccess ? "SYNCED" : "UPDATE MOOD",
+                color: _syncSuccess
+                    ? const Color(0xFF00FF9D)
+                    : const Color(0xFFBD00FF),
+                isLoading: _isSyncing,
+                onTap: _syncToBrain,
+              ).animate().fadeIn(delay: 600.ms).scale(),
             ],
           ),
         ),
@@ -456,37 +476,13 @@ class _InputScreenState extends State<InputScreen> {
       Function(double) onChanged) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(children: [
-                Text(emoji),
-                const SizedBox(width: 8),
-                Text(label,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 12))
-              ]),
-              Text("${(value * 100).toInt()}",
-                  style: TextStyle(color: color, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              activeTrackColor: color,
-              thumbColor: color,
-              overlayColor: color.withOpacity(0.2),
-              trackHeight: 4,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-            ),
-            child: Slider(
-                value: value,
-                onChanged: onChanged,
-                onChangeEnd: (_) => HapticFeedback.mediumImpact()),
-          ),
-        ],
-      ),
+      child: InteractiveSegmentedBar(
+        label: label,
+        emoji: emoji,
+        value: value,
+        color: color,
+        onChanged: onChanged,
+      ).animate().fadeIn(duration: 600.ms).slideX(begin: 0.2, end: 0),
     );
   }
 
@@ -636,17 +632,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
           "💡 Possible fixes: Check internet, increase timeout, verify MongoDB URI");
       if (mounted) setState(() => _isLoading = false);
     } on SocketException catch (e) {
-      debugPrint("🌐 SOCKET/NETWORK ERROR: $e");
-      debugPrint(
-          "💡 Possible causes: No internet, DNS resolution failed, firewall blocked");
+      debugPrint("🌐 SOCKET ERROR: $e");
       if (mounted) setState(() => _isLoading = false);
-    } on FormatException catch (e) {
-      debugPrint(
-          "📝 FORMAT ERROR: Invalid MongoDB URI or response format - $e");
-      if (mounted) setState(() => _isLoading = false);
-    } catch (e, stackTrace) {
-      debugPrint("❌ Error fetching history: ${e.runtimeType} - $e");
-      debugPrint("Stack trace: $stackTrace");
+    } catch (e) {
+      debugPrint("❌ Error fetching history: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -674,12 +663,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       itemBuilder: (context, index) {
                         final day = _history[index];
                         final moods = day['data'] as Map<String, String>;
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
+                        return GlassCard(
                           padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                              color: Colors.white10,
-                              borderRadius: BorderRadius.circular(16)),
+                          borderRadius: BorderRadius.circular(16),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -699,7 +685,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               )
                             ],
                           ),
-                        );
+                        ).animate().fadeIn(delay: (50 * index).ms).slideX();
                       },
                     ),
             ),
@@ -861,11 +847,9 @@ class _StatsScreenState extends State<StatsScreen> {
       if (mounted) setState(() => _isLoading = false);
     } on SocketException catch (e) {
       debugPrint("🌐 STATS NETWORK ERROR: $e");
-      debugPrint("💡 Check: Internet connection, DNS resolution, firewall");
       if (mounted) setState(() => _isLoading = false);
-    } catch (e, stackTrace) {
-      debugPrint("❌ Error fetching stats: ${e.runtimeType} - $e");
-      debugPrint("Stack trace: $stackTrace");
+    } catch (e) {
+      debugPrint("❌ Error fetching stats: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -874,16 +858,20 @@ class _StatsScreenState extends State<StatsScreen> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: SingleChildScrollView(
+        padding: const EdgeInsets.only(bottom: 100), // Space for floating nav
         child: Padding(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text("ANALYTICS",
-                  style: GoogleFonts.inter(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 32,
-                      letterSpacing: -1.5)),
+                      style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 32,
+                          letterSpacing: -1.5))
+                  .animate()
+                  .fadeIn()
+                  .slideY(),
               const SizedBox(height: 32),
               _isLoading
                   ? const Center(
@@ -916,37 +904,44 @@ class _StatsScreenState extends State<StatsScreen> {
                         const SizedBox(height: 48),
                         _buildSectionHeader("MOOD DISTRIBUTION"),
                         const SizedBox(height: 24),
-                        SizedBox(
-                          height: 200,
-                          child: _moodDistribution.isEmpty
-                              ? Center(
-                                  child: Text("No Data",
-                                      style: GoogleFonts.inter(
-                                          color: Colors.white38)))
-                              : PieChart(
-                                  PieChartData(
-                                    sectionsSpace: 4,
-                                    centerSpaceRadius: 40,
-                                    sections: _buildPieSections(),
+                        GlassCard(
+                          child: SizedBox(
+                            height: 200,
+                            child: _moodDistribution.isEmpty
+                                ? Center(
+                                    child: Text("No Data",
+                                        style: GoogleFonts.inter(
+                                            color: Colors.white38)))
+                                : PieChart(
+                                    PieChartData(
+                                      sectionsSpace: 4,
+                                      centerSpaceRadius: 40,
+                                      sections: _buildPieSections(),
+                                    ),
                                   ),
-                                ),
+                          ),
                         ),
                         const SizedBox(height: 48),
                         _buildSectionHeader("SLEEP TREND (7 DAYS)"),
                         const SizedBox(height: 24),
-                        SizedBox(
-                          height: 180,
-                          child: BarChart(
-                            BarChartData(
-                              gridData: const FlGridData(show: false),
-                              titlesData: const FlTitlesData(show: false),
-                              borderData: FlBorderData(show: false),
-                              barGroups: _buildBarGroups(),
+                        GlassCard(
+                          child: SizedBox(
+                            height: 180,
+                            child: BarChart(
+                              BarChartData(
+                                gridData: const FlGridData(show: false),
+                                titlesData: const FlTitlesData(show: false),
+                                borderData: FlBorderData(show: false),
+                                barGroups: _buildBarGroups(),
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(height: 40),
-                      ],
+                      ]
+                          .animate(interval: 100.ms)
+                          .fadeIn()
+                          .slideY(begin: 0.1, end: 0),
                     ),
             ],
           ),
@@ -969,12 +964,9 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   Widget _buildInfoCard(String label, String value, Color accent) {
-    return Container(
+    return GlassCard(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white10)),
+      borderRadius: BorderRadius.circular(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1054,6 +1046,192 @@ class _Badge extends StatelessWidget {
       child: Text(text,
           style: TextStyle(
               color: color, fontSize: 8, fontWeight: FontWeight.bold)),
+    );
+  }
+}
+
+// ============================================================================
+// PREMIUM UI WIDGETS
+// ============================================================================
+
+class GlassCard extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final BorderRadius? borderRadius;
+
+  const GlassCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(20),
+    this.borderRadius,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: borderRadius ?? BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: borderRadius ?? BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withOpacity(0.1)),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class InteractiveSegmentedBar extends StatelessWidget {
+  final String label;
+  final String emoji;
+  final double value; // 0.0 to 1.0
+  final Color color;
+  final Function(double) onChanged;
+
+  const InteractiveSegmentedBar({
+    super.key,
+    required this.label,
+    required this.emoji,
+    required this.value,
+    required this.color,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(children: [
+              Text(emoji, style: const TextStyle(fontSize: 16)),
+              const SizedBox(width: 8),
+              Text(label,
+                  style: GoogleFonts.inter(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: Colors.white70,
+                      letterSpacing: 1.5)),
+            ]),
+            Text("${(value * 10.0).toStringAsFixed(1)}",
+                style: GoogleFonts.inter(
+                    color: color, fontWeight: FontWeight.bold, fontSize: 14)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        GestureDetector(
+          onPanUpdate: (details) {
+            _updateValue(context, details.localPosition.dx);
+          },
+          onTapDown: (details) {
+            _updateValue(context, details.localPosition.dx);
+          },
+          child: Container(
+            height: 24,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.white10,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Stack(
+              children: [
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      curve: Curves.easeOut,
+                      width: constraints.maxWidth * value,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [color.withOpacity(0.5), color],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                              color: color.withOpacity(0.4),
+                              blurRadius: 10,
+                              offset: const Offset(0, 2))
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _updateValue(BuildContext context, double dx) {
+    // Basic approximation assuming full width minus padding
+    // Ideally we use LayoutBuilder but for simplicity in this monolithic file:
+    double totalWidth = MediaQuery.of(context).size.width - 48; // 24*2 padding
+    double newVal = (dx / totalWidth).clamp(0.0, 1.0);
+
+    if (newVal != value) {
+      if ((newVal - value).abs() > 0.05) HapticFeedback.lightImpact();
+      onChanged(newVal);
+    }
+  }
+}
+
+class NeonBtn extends StatelessWidget {
+  final VoidCallback onTap;
+  final String text;
+  final Color color;
+  final bool isLoading;
+
+  const NeonBtn(
+      {super.key,
+      required this.onTap,
+      required this.text,
+      required this.color,
+      this.isLoading = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: isLoading ? null : onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.4),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
+            )
+          ],
+        ),
+        child: Center(
+          child: isLoading
+              ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2))
+              : Text(
+                  text,
+                  style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16),
+                ),
+        ),
+      ),
     );
   }
 }
