@@ -62,9 +62,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
+    return SizedBox.expand(
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.fromLTRB(
+            24, 60, 24, 120), // Manual padding instead of SafeArea
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

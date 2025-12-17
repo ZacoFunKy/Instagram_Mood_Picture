@@ -68,15 +68,23 @@ class DatabaseService {
       return;
     }
 
+    if (uri.contains("localhost") || uri.contains("127.0.0.1")) {
+      debugPrint("⚠️ WARNING: You are using 'localhost' in MongoDB URI.");
+      debugPrint("   - On Android Emulator, use '10.0.2.2' instead.");
+      debugPrint(
+          "   - On Real Device, use your PC's LAN IP (e.g., 192.168.x.x).");
+    }
+
     try {
       debugPrint("🔌 MongoDB: Connecting...");
       _db = await mongo.Db.create(uri);
-      await _db!.open();
+      // Increased timeout to 10s to allow for slower networks
+      await _db!.open().timeout(const Duration(seconds: 10));
 
       if (mobileUri != null) {
         debugPrint("🔌 MongoDB (Mobile): Connecting...");
         _mobileDb = await mongo.Db.create(mobileUri);
-        await _mobileDb!.open();
+        await _mobileDb!.open().timeout(const Duration(seconds: 10));
       }
 
       _isConnected = true;
@@ -86,6 +94,7 @@ class DatabaseService {
       _isConnected = false;
       _db = null;
       _mobileDb = null;
+      rethrow; // Explicitly fail so caller catches it
     } finally {
       if (!_connectionCompleter!.isCompleted) {
         _connectionCompleter!.complete();

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../widgets/glass_card.dart';
 import 'input_screen.dart';
@@ -23,6 +24,20 @@ class _MainScaffoldState extends State<MainScaffold> {
     HistoryScreen(),
     StatsScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _requestPermissions();
+  }
+
+  Future<void> _requestPermissions() async {
+    // Request all necessary permissions at once
+    await [
+      Permission.location,
+      Permission.activityRecognition,
+    ].request();
+  }
 
   @override
   Widget build(BuildContext context) {

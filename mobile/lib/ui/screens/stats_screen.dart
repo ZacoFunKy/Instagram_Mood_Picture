@@ -117,11 +117,15 @@ class _StatsScreenState extends State<StatsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
+    // Removed SafeArea here because it might be interfering with the Stack in MainScaffold
+    // or causing the scroll view to not fill the screen.
+    // Actually, let's wrap in a Container with full size.
+    return SizedBox.expand(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.only(bottom: 100),
+        padding: const EdgeInsets.only(
+            top: 60, bottom: 120), // Top padding for status bar, bottom for nav
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
