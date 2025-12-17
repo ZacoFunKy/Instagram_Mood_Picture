@@ -9,11 +9,7 @@ on:
     - cron: '0 12 * * *'
     # 5pm UTC (6pm/7pm FR) = Soirée (Wind Down)
     - cron: '0 17 * * *'
-  
-  push:
-    branches: [ "main" ]
-
-  
+    
   # Permet aussi de lancer manuellement via GitHub Actions UI avec options
   workflow_dispatch:
     inputs:

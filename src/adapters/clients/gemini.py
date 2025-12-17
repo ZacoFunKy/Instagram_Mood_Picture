@@ -46,10 +46,10 @@ VALID_MOODS = {
 
 # Model preference order for cascade fallback
 PREFERRED_MODELS = [
-    'gemini-2.0-flash-exp',
-    'gemini-exp-1206',
-    'gemini-1.5-flash',
-    'gemini-1.5-pro',
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-flash-latest',
     'gemini-pro'
 ]
 
