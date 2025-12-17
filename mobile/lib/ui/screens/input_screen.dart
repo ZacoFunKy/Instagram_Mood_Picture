@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
 import 'package:sleek_circular_slider/sleek_circular_slider.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import '../../models/mood_entry.dart';
 import '../../services/database_service.dart';
