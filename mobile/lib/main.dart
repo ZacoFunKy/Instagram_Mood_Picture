@@ -70,7 +70,8 @@ void main() async {
   } catch (e) {
     debugPrint("Warning: Config file not found: $e");
   }
-  await MongoService.instance.init(); // Init DB Once
+  // Initialize DB in background to avoid blocking App Start (Black/White screen)
+  MongoService.instance.init();
   runApp(const MoodApp());
 }
 

@@ -90,6 +90,8 @@ jobs:
 
       - name: Generate Launcher Icons
         run: |
+          pwd
+          ls -R assets || echo "Assets directory not found"
           if [ -f "assets/icon.png" ]; then
             flutter pub run flutter_launcher_icons
             echo "✅ Generated launcher icons from assets/icon.png"
@@ -134,8 +136,11 @@ jobs:
         id: tag
         run: |
           TAG="v$(date +%Y.%m.%d)-$(date +%H%M%S)"
+          DATE_STR="$(date +'%Y-%m-%d %H:%M:%S')"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "date=$DATE_STR" >> $GITHUB_OUTPUT
           echo "📦 Release Tag: $TAG"
+          echo "📅 Date: $DATE_STR"
 
       - name: Create and Push Git Tag
         run: |
@@ -158,7 +163,7 @@ jobs:
           body: |
             ## 🎉 New Mood App Release
             
-            **Build Date**: $(date)
+            **Build Date**: ${{ steps.tag.outputs.date }}
             **Branch**: main
             
             ### Installation Instructions
