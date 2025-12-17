@@ -75,15 +75,35 @@ class DatabaseService {
           "   - On Real Device, use your PC's LAN IP (e.g., 192.168.x.x).");
     }
 
+    // Force TLS for Android compatibility involving older/custom CAs
+    if (!uri.contains("tls=")) {
+      uri += (uri.contains("?") ? "&" : "?") + "tls=true&authSource=admin";
+    }
+
+    String connectionUri = uri; // uri is verified non-null above
+
+    // Force TLS for Android compatibility involving older/custom CAs
+    if (!connectionUri.contains("tls=")) {
+      connectionUri += (connectionUri.contains("?") ? "&" : "?") +
+          "tls=true&authSource=admin";
+    }
+
+    // Fix for Mobile Override URI too
+    String? mobileConnectionUri = mobileUri;
+    if (mobileConnectionUri != null && !mobileConnectionUri.contains("tls=")) {
+      mobileConnectionUri += (mobileConnectionUri.contains("?") ? "&" : "?") +
+          "tls=true&authSource=admin";
+    }
+
     try {
-      debugPrint("🔌 MongoDB: Connecting...");
-      _db = await mongo.Db.create(uri);
+      debugPrint("🔌 MongoDB: Connecting to $connectionUri");
+      _db = await mongo.Db.create(connectionUri);
       // Increased timeout to 10s to allow for slower networks
       await _db!.open().timeout(const Duration(seconds: 10));
 
-      if (mobileUri != null) {
+      if (mobileConnectionUri != null) {
         debugPrint("🔌 MongoDB (Mobile): Connecting...");
-        _mobileDb = await mongo.Db.create(mobileUri);
+        _mobileDb = await mongo.Db.create(mobileConnectionUri);
         await _mobileDb!.open().timeout(const Duration(seconds: 10));
       }
 

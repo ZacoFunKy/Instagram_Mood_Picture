@@ -120,99 +120,99 @@ class _StatsScreenState extends State<StatsScreen> {
   @override
   Widget build(BuildContext context) {
     return SizedBox.expand(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header (Fixed at top)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 60, 24, 20),
-            child: Text("ANALYTICS", style: AppTheme.headerLarge)
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 60, 24, 120),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Text("ANALYTICS", style: AppTheme.headerLarge)
                 .animate()
                 .fadeIn()
                 .slideY(),
+            const SizedBox(height: 20),
+
+            // Content
+            Expanded(
+              child: _buildContent(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    if (_isLoading) {
+      return const Center(
+          child: CircularProgressIndicator(color: Colors.white));
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white54, size: 48),
+            const SizedBox(height: 16),
+            Text(_errorMessage!,
+                textAlign: TextAlign.center, style: AppTheme.subText),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _fetchStats,
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.neonPurple),
+              child: const Text("RETRY", style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_recentEntries.isEmpty) {
+      return Center(
+          child: Text("No stats available yet.", style: AppTheme.subText));
+    }
+
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                  child: _buildInfoCard(
+                      "TOP MOOD", _topMood, AppTheme.neonPurple)),
+              const SizedBox(width: 16),
+              Expanded(
+                  child: _buildInfoCard(
+                      "AVG SLEEP", _avgSleep, AppTheme.neonGreen)),
+            ],
           ),
-
-          // Content (Scrollable or Centered Loader)
-          Expanded(
-            child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(color: Colors.white))
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 120),
-                    child: Column(
-                      children: [
-                        if (_errorMessage != null)
-                          Center(
-                            child: Column(
-                              children: [
-                                const SizedBox(height: 48),
-                                const Icon(Icons.error_outline,
-                                    color: Colors.white54, size: 48),
-                                const SizedBox(height: 16),
-                                Text(_errorMessage!,
-                                    textAlign: TextAlign.center,
-                                    style: AppTheme.subText),
-                                const SizedBox(height: 24),
-                                ElevatedButton(
-                                  onPressed: _fetchStats,
-                                  style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppTheme.neonPurple),
-                                  child: const Text("RETRY",
-                                      style: TextStyle(color: Colors.white)),
-                                ),
-                              ],
-                            ),
-                          )
-                        else if (_recentEntries.isEmpty)
-                          Center(
-                              child: Text("No stats available yet.",
-                                  style: AppTheme.subText))
-                        else ...[
-                          Row(
-                            children: [
-                              Expanded(
-                                  child: _buildInfoCard("TOP MOOD", _topMood,
-                                      AppTheme.neonPurple)),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                  child: _buildInfoCard("AVG SLEEP", _avgSleep,
-                                      AppTheme.neonGreen)),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                  child: _buildInfoCard(
-                                      "ENERGY", _avgEnergy, Colors.amber)),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                  child: _buildInfoCard(
-                                      "STRESS", _avgStress, AppTheme.neonPink)),
-                            ],
-                          ),
-                          const SizedBox(height: 48),
-
-                          // Charts
-                          if (_moodDistribution.isNotEmpty) ...[
-                            _buildSectionHeader("MOOD DISTRIBUTION"),
-                            const SizedBox(height: 24),
-                            _buildPieChart(),
-                            const SizedBox(height: 48),
-                          ],
-
-                          _buildSectionHeader("SLEEP TREND (7 DAYS)"),
-                          const SizedBox(height: 24),
-                          _buildBarChart(),
-                        ]
-                      ]
-                          .animate(interval: 100.ms)
-                          .fadeIn()
-                          .slideY(begin: 0.1, end: 0),
-                    ),
-                  ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                  child: _buildInfoCard("ENERGY", _avgEnergy, Colors.amber)),
+              const SizedBox(width: 16),
+              Expanded(
+                  child:
+                      _buildInfoCard("STRESS", _avgStress, AppTheme.neonPink)),
+            ],
           ),
-        ],
+          const SizedBox(height: 48),
+
+          // Charts
+          if (_moodDistribution.isNotEmpty) ...[
+            _buildSectionHeader("MOOD DISTRIBUTION"),
+            const SizedBox(height: 24),
+            _buildPieChart(),
+            const SizedBox(height: 48),
+          ],
+
+          _buildSectionHeader("SLEEP TREND (7 DAYS)"),
+          const SizedBox(height: 24),
+          _buildBarChart(),
+        ].animate(interval: 100.ms).fadeIn().slideY(begin: 0.1, end: 0),
       ),
     );
   }
