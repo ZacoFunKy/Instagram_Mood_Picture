@@ -59,16 +59,17 @@ class DatabaseService {
 
     _connectionCompleter = Completer<void>();
 
-    final String? uri = dotenv.env['MONGO_URI'];
-    final String? mobileUri = dotenv.env['MONGO_URI_MOBILE'];
+    // Use local mutable variables
+    String? uriString = dotenv.env['MONGO_URI'];
+    String? mobileUriString = dotenv.env['MONGO_URI_MOBILE'];
 
-    if (uri == null) {
+    if (uriString == null) {
       debugPrint("❌ ERROR: MONGO_URI is missing in .env");
       _connectionCompleter!.complete();
       return;
     }
 
-    if (uri.contains("localhost") || uri.contains("127.0.0.1")) {
+    if (uriString.contains("localhost") || uriString.contains("127.0.0.1")) {
       debugPrint("⚠️ WARNING: You are using 'localhost' in MongoDB URI.");
       debugPrint("   - On Android Emulator, use '10.0.2.2' instead.");
       debugPrint(
@@ -76,34 +77,26 @@ class DatabaseService {
     }
 
     // Force TLS for Android compatibility involving older/custom CAs
-    if (!uri.contains("tls=")) {
-      uri += (uri.contains("?") ? "&" : "?") + "tls=true&authSource=admin";
-    }
-
-    String connectionUri = uri; // uri is verified non-null above
-
-    // Force TLS for Android compatibility involving older/custom CAs
-    if (!connectionUri.contains("tls=")) {
-      connectionUri += (connectionUri.contains("?") ? "&" : "?") +
-          "tls=true&authSource=admin";
+    if (!uriString.contains("tls=")) {
+      uriString +=
+          (uriString.contains("?") ? "&" : "?") + "tls=true&authSource=admin";
     }
 
     // Fix for Mobile Override URI too
-    String? mobileConnectionUri = mobileUri;
-    if (mobileConnectionUri != null && !mobileConnectionUri.contains("tls=")) {
-      mobileConnectionUri += (mobileConnectionUri.contains("?") ? "&" : "?") +
+    if (mobileUriString != null && !mobileUriString.contains("tls=")) {
+      mobileUriString += (mobileUriString.contains("?") ? "&" : "?") +
           "tls=true&authSource=admin";
     }
 
     try {
-      debugPrint("🔌 MongoDB: Connecting to $connectionUri");
-      _db = await mongo.Db.create(connectionUri);
+      debugPrint("🔌 MongoDB: Connecting to $uriString");
+      _db = await mongo.Db.create(uriString);
       // Increased timeout to 10s to allow for slower networks
       await _db!.open().timeout(const Duration(seconds: 10));
 
-      if (mobileConnectionUri != null) {
+      if (mobileUriString != null) {
         debugPrint("🔌 MongoDB (Mobile): Connecting...");
-        _mobileDb = await mongo.Db.create(mobileConnectionUri);
+        _mobileDb = await mongo.Db.create(mobileUriString);
         await _mobileDb!.open().timeout(const Duration(seconds: 10));
       }
 

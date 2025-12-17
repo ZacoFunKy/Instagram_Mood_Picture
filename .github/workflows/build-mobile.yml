@@ -59,13 +59,27 @@ jobs:
           fi
 
           echo "MONGO_URI=$URI" > .env
-          echo "MONGO_URI_MOBILE=${{ secrets.MONGO_URI_MOBILE }}" >> .env
+          
+          # Handle Mobile URI
+          URI_MOBILE="${{ secrets.MONGO_URI_MOBILE }}"
+          if [ -z "$URI_MOBILE" ]; then
+             echo "⚠️ WARNING: MONGO_URI_MOBILE not found. Sync might fail."
+          else
+             echo "MONGO_URI_MOBILE=$URI_MOBILE" >> .env
+          fi
+          
           echo "COLLECTION_NAME=overrides" >> .env
           
           echo "✅ .env created in working directory (mobile/)"
-          # Print first few chars to verify injection (don't print full secret)
-          echo "URI check: ${URI:0:15}..."
-          cat .env
+          
+          # STRICT VERIFICATION
+          if ! grep -q "MONGO_URI=" .env; then
+            echo "❌ FATAL: .env missing MONGO_URI"
+            exit 1
+          fi
+          
+          echo "🔍 Verifying .env content (masked):"
+          cat .env | sed 's/mongodb+srv:\/\/[^@]*@/mongodb+srv:\/\/USER:PASS@/g'
         # Note: MONGO_URI for history (daily_logs), MONGO_URI_MOBILE for overrides
 
       - name: Setup Android Local Properties
