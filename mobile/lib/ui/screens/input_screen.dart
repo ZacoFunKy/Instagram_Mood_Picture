@@ -82,8 +82,9 @@ class _InputScreenState extends State<InputScreen> {
     if (!silent) setState(() => _isSyncing = true);
 
     try {
-      // 1. Get DB Connection
-      final collection = await DatabaseService.instance.logsCollection;
+      // 1. Get DB Connection (with explicit timeout safety net)
+      final collection = await DatabaseService.instance.logsCollection
+          .timeout(const Duration(seconds: 15));
 
       // 2. Prepare Data Model
       final entry = MoodEntry(
@@ -99,11 +100,13 @@ class _InputScreenState extends State<InputScreen> {
       );
 
       // 3. Upsert
-      await collection.replaceOne(
-        mongo.where.eq('date', entry.date),
-        entry.toJson(),
-        upsert: true,
-      );
+      await collection
+          .replaceOne(
+            mongo.where.eq('date', entry.date),
+            entry.toJson(),
+            upsert: true,
+          )
+          .timeout(const Duration(seconds: 15));
 
       debugPrint("✅ Synced: ${entry.toJson()}");
 
@@ -119,9 +122,13 @@ class _InputScreenState extends State<InputScreen> {
           });
         }
       }
+    } on TimeoutException {
+      debugPrint("❌ Sync Timeout");
+      if (!silent) _showError("Connection timed out. Check your internet.");
+      if (mounted) setState(() => _isSyncing = false);
     } catch (e) {
       debugPrint("❌ Sync Error: $e");
-      if (!silent) _showError("Sync Error: $e");
+      if (!silent) _showError("Sync Failed: Check Internet");
       if (mounted) setState(() => _isSyncing = false);
     }
   }

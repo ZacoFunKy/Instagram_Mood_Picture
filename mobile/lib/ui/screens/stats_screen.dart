@@ -42,7 +42,8 @@ class _StatsScreenState extends State<StatsScreen> {
     });
 
     try {
-      final collection = await DatabaseService.instance.logsCollection;
+      final collection = await DatabaseService.instance.logsCollection
+          .timeout(const Duration(seconds: 15));
 
       // Fetch last 30 days for robust stats
       final logs = await collection

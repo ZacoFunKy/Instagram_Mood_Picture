@@ -32,7 +32,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
     });
 
     try {
-      final collection = await DatabaseService.instance.logsCollection;
+      final collection = await DatabaseService.instance.logsCollection
+          .timeout(const Duration(seconds: 15));
 
       final logs = await collection
           .find(mongo.where.sortBy('date', descending: true).limit(30))

@@ -47,7 +47,7 @@ jobs:
 
       - name: Create .env config
         run: |
-          echo "MONGO_URI=${{ secrets.MONGO_URI }}" > .env
+          echo "MONGO_URI=${{ secrets.MONGODB_URI }}" > .env
           echo "MONGO_URI_MOBILE=${{ secrets.MONGO_URI_MOBILE }}" >> .env
           echo "COLLECTION_NAME=overrides" >> .env
           echo "✅ .env created in working directory (mobile/)"
