@@ -107,11 +107,23 @@ class DatabaseService {
     _connect(); // Fire and forget
   }
 
-  /// Helper to get the overrides collection
-  Future<mongo.DbCollection> get logsCollection async {
+  /// Collection: daily_logs (Read-Only validation / History / Stats)
+  /// Lives in 'profile_predictor' DB (Main)
+  Future<mongo.DbCollection> get dailyLogs async {
     final db = await database;
-    // Use mobileDB if available for overrides, else main DB
-    final targetDb = _mobileDb ?? db;
-    return targetDb.collection(collectionName);
+    return db.collection("daily_logs");
+  }
+
+  /// Collection: overrides (Write / Sync)
+  /// Lives in 'mobile' DB (Mobile) - Falls back to Main if mobileDB not set
+  Future<mongo.DbCollection> get overrides async {
+    if (_mobileDb != null && _mobileDb!.isConnected) {
+      return _mobileDb!.collection("overrides");
+    }
+    // Fallback or Error? User said "Sync goes into override".
+    // If we only have one DB connected, we might want to check its name,
+    // but assuming overrides exists there too or we fail cleanly.
+    final db = await database;
+    return db.collection("overrides");
   }
 }

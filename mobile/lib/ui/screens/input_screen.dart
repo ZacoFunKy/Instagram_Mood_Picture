@@ -81,9 +81,17 @@ class _InputScreenState extends State<InputScreen> {
   Future<void> _syncToBrain({bool silent = false}) async {
     if (!silent) setState(() => _isSyncing = true);
 
+    final uri = dotenv.env['MONGO_URI'];
+    if (uri == null || uri.isEmpty) {
+      debugPrint("❌ ERROR: MONGO_URI is missing or empty.");
+      if (!silent) _showError("Config Error: Missing Database URI");
+      if (mounted) setState(() => _isSyncing = false);
+      return;
+    }
+
     try {
-      // 1. Get DB Connection (with explicit timeout safety net)
-      final collection = await DatabaseService.instance.logsCollection
+      // 1. Get DB Connection (target: mobile.overrides)
+      final collection = await DatabaseService.instance.overrides
           .timeout(const Duration(seconds: 15));
 
       // 2. Prepare Data Model

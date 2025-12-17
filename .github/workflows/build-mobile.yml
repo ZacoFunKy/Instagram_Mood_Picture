@@ -47,10 +47,24 @@ jobs:
 
       - name: Create .env config
         run: |
-          echo "MONGO_URI=${{ secrets.MONGODB_URI }}" > .env
+          # Try to get MONGO_URI first, then MONGODB_URI
+          URI="${{ secrets.MONGO_URI }}"
+          if [ -z "$URI" ]; then
+            URI="${{ secrets.MONGODB_URI }}"
+          fi
+          
+          if [ -z "$URI" ]; then
+             echo "❌ FATAL: No Mongo URI secret found (checked MONGO_URI and MONGODB_URI)"
+             exit 1
+          fi
+
+          echo "MONGO_URI=$URI" > .env
           echo "MONGO_URI_MOBILE=${{ secrets.MONGO_URI_MOBILE }}" >> .env
           echo "COLLECTION_NAME=overrides" >> .env
+          
           echo "✅ .env created in working directory (mobile/)"
+          # Print first few chars to verify injection (don't print full secret)
+          echo "URI check: ${URI:0:15}..."
           cat .env
         # Note: MONGO_URI for history (daily_logs), MONGO_URI_MOBILE for overrides
 

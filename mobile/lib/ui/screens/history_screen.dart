@@ -32,7 +32,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
     });
 
     try {
-      final collection = await DatabaseService.instance.logsCollection
+      // History reads from profile_predictor.daily_logs
+      final collection = await DatabaseService.instance.dailyLogs
           .timeout(const Duration(seconds: 15));
 
       final logs = await collection
