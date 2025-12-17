@@ -9,7 +9,8 @@
     <application
         android:label="Mood"
         android:usesCleartextTraffic="true"
-        android:name="${applicationName}">
+        android:name="${applicationName}"
+        android:theme="@style/LaunchTheme">
         <activity
             android:name=".MainActivity"
             android:exported="true"

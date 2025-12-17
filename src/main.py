@@ -125,7 +125,8 @@ def fetch_historical_moods(weekday: str, execution_type: str, dry_run: bool) -> 
 
     try:
         db = mongo_client.get_database()
-        logs_collection = db['daily_logs']
+        logs_collection = db['daily_log']
+
 
         # Maintenance: Clean old logs
         try:
@@ -170,7 +171,8 @@ def save_daily_log(
 
     try:
         db = mongo_client.get_database()
-        logs_collection = db['daily_logs']
+        logs_collection = db['daily_log']
+
 
         entry = {
             "date": datetime.datetime.now().strftime("%Y-%m-%d"),

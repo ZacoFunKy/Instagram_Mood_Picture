@@ -46,11 +46,11 @@ VALID_MOODS = {
 
 # Model preference order for cascade fallback
 PREFERRED_MODELS = [
-    'models/gemini-2.0-flash-exp',  # PREFERRED DEFAULT
-    'models/gemini-exp-1206',
-    'models/gemini-2.5-flash',
-    'models/gemini-1.5-flash',
-    'models/gemini-1.5-pro'
+    'gemini-2.0-flash-exp',
+    'gemini-exp-1206',
+    'gemini-1.5-flash',
+    'gemini-1.5-pro',
+    'gemini-pro'
 ]
 
 logger = logging.getLogger(__name__)

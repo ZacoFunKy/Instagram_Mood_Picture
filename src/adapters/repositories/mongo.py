@@ -26,7 +26,8 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 DATABASE_NAME = "profile_predictor"
-LOGS_COLLECTION_NAME = "daily_logs"
+LOGS_COLLECTION_NAME = "daily_log"
+
 MAX_LOG_RETENTION_DAYS = 365
 CONNECTION_TIMEOUT_MS = 10000
 DEFAULT_LOG_LIMIT = 4

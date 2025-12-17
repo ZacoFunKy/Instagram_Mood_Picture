@@ -15,15 +15,62 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'dart:ui'; // For BackdropFilter
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart'; // For Location
+import 'package:geocoding/geocoding.dart'; // For City Name
 import 'package:http/http.dart' as http; // For Weather API
+
+// --- SINGLETON MONGO SERVICE ---
+class MongoService {
+  static final MongoService _instance = MongoService._internal();
+  static MongoService get instance => _instance;
+
+  mongo.Db? _db;
+  mongo.Db? _mobileDb; // For overrides
+  bool _isConnected = false;
+
+  MongoService._internal();
+
+  Future<void> init() async {
+    if (_isConnected) return;
+
+    final String? uri = dotenv.env['MONGO_URI'];
+    final String? mobileUri = dotenv.env['MONGO_URI_MOBILE'];
+
+    if (uri == null) {
+      debugPrint("❌ MONGO_URI missing");
+      return;
+    }
+
+    try {
+      debugPrint("🔌 Connecting to Main MongoDB...");
+      _db = await mongo.Db.create(uri);
+      await _db!.open();
+
+      if (mobileUri != null) {
+        debugPrint("🔌 Connecting to Mobile MongoDB...");
+        _mobileDb = await mongo.Db.create(mobileUri);
+        await _mobileDb!.open();
+      }
+
+      _isConnected = true;
+      debugPrint("✅ MongoDB Connected (Persistent)");
+    } catch (e) {
+      debugPrint("❌ MongoDB Connection Warning: $e");
+      // Don't crash, just log. Retry happens on usage if needed.
+    }
+  }
+
+  mongo.Db? get db => _db;
+  mongo.Db? get mobileDb => _mobileDb;
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
-    await dotenv.load(fileName: ".env");
+    await dotenv.load(fileName: "assets/.env");
   } catch (e) {
     debugPrint("Warning: Config file not found: $e");
   }
+  await MongoService.instance.init(); // Init DB Once
   runApp(const MoodApp());
 }
 
@@ -150,11 +197,13 @@ class _InputScreenState extends State<InputScreen> {
 
   bool _isSyncing = false;
   bool _syncSuccess = false;
-  String _temperature = ""; // Store temp
+  String _temperature = "";
+  String _cityName = ""; // Store city
   bool _weatherLoading = false;
 
   // Step Counting
   int _stepCount = 0;
+  int _stepsAtLastReset = 0; // Steps stored at start of day
   StreamSubscription<StepCount>? _stepCountStream;
   Timer? _autoSyncTimer;
   Timer? _stepRefreshTimer;
@@ -162,10 +211,75 @@ class _InputScreenState extends State<InputScreen> {
   @override
   void initState() {
     super.initState();
+    _loadDailySteps(); // Load saved steps first
     _initPedometer();
     _startAutoSync();
     _startStepRefresh();
     _fetchWeather(); // Fetch weather on init
+  }
+
+  // --- ACCUMULATOR LOGIC ---
+  Future<void> _loadDailySteps() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final savedDate = prefs.getString('step_date');
+
+    if (savedDate == today) {
+      setState(() {
+        _stepCount = prefs.getInt('daily_steps') ?? 0;
+        _stepsAtLastReset = prefs.getInt('steps_at_reset') ?? 0;
+      });
+    } else {
+      // New day, reset
+      await prefs.setString('step_date', today);
+      await prefs.setInt('daily_steps', 0);
+      await prefs.setInt('steps_at_reset', 0); // Will be set on first event
+      setState(() {
+        _stepCount = 0;
+        _stepsAtLastReset = 0;
+      });
+    }
+  }
+
+  void _onStepCount(StepCount event) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // 1. If it's our first event of the day/session and we have no baseline:
+    if (_stepsAtLastReset == 0) {
+      // This is our baseline.
+      _stepsAtLastReset = event.steps - _stepCount;
+      // Logic: If we had 500 steps saved, and sensor says 10000, resetting baseline means
+      // we account for the gap.
+      // Simpler: Just set baseline to current sensor value MINUS what we already have?
+      // No, simplest accumulator:
+      // DailySteps = SensorSteps - StepsAtStartOfDay
+
+      // Let's rely on stored offset
+      _stepsAtLastReset = event.steps - _stepCount; // Re-align offset
+      await prefs.setInt('steps_at_reset', _stepsAtLastReset);
+    }
+
+    // 2. Calculate steps
+    int calculated = event.steps - _stepsAtLastReset;
+
+    // 3. Handle Reboots (Sensor resets to 0)
+    if (calculated < 0) {
+      // Sensor reset!
+      // New baseline is 0, but we keep our existing _stepCount as "banked"
+      // So we effectively just change the offset to 0 - current_banked
+      // Actually: StepsAtStartOfDay needs to become 0 minus what we already have?
+      // Let's do:
+      _stepsAtLastReset = 0 - _stepCount;
+      calculated = event.steps - _stepsAtLastReset;
+      await prefs.setInt('steps_at_reset', _stepsAtLastReset);
+    }
+
+    setState(() {
+      _stepCount = calculated;
+    });
+
+    // 4. Save
+    await prefs.setInt('daily_steps', _stepCount);
   }
 
   @override
@@ -185,19 +299,27 @@ class _InputScreenState extends State<InputScreen> {
   }
 
   Future<void> _checkMidnightReset() async {
-    DateTime now = DateTime.now();
-    final today = DateFormat('yyyy-MM-dd').format(now);
     final prefs = await SharedPreferences.getInstance();
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final savedDate = prefs.getString('step_date');
 
     if (savedDate != today) {
-      debugPrint("📅 New day detected ($today), resetting daily steps");
+      debugPrint("📅 Midnight detected! Resetting accumulator.");
+      // It's a new day.
+      // We need to set our 'StepsAtStartOfDay' (offset) to the CURRENT sensor value.
+      // But we can't access sensor value on demand, only via stream.
+      // So we just reset stored count to 0. The next stream event will see the discrepancy
+      // and adjust the offset in _onStepCount because it will behave like a reboot/jump.
+      // Actually simplest:
+      await prefs.setString('step_date', today);
+      await prefs.setInt('daily_steps', 0);
+      // We force a "reset needed" state
+      await prefs.setInt('steps_at_reset', 0);
+
       setState(() {
         _stepCount = 0;
+        _stepsAtLastReset = 0;
       });
-      await prefs.setString('step_date', today);
-      await prefs.setInt('daily_steps_accumulated', 0);
-      // We don't reset 'last_sensor_value' here, as it's just a reference for deltas
     }
   }
 
@@ -210,55 +332,18 @@ class _InputScreenState extends State<InputScreen> {
     });
   }
 
-  Future<void> _initPedometer() async {
-    final status = await Permission.activityRecognition.request();
-    if (!status.isGranted) return;
-
-    final prefs = await SharedPreferences.getInstance();
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-
-    // Initialize/Restore state
-    if (prefs.getString('step_date') != today) {
-      await prefs.setString('step_date', today);
-      await prefs.setInt('daily_steps_accumulated', 0);
+  void _initPedometer() async {
+    bool granted = await Permission.activityRecognition.isGranted;
+    if (!granted) {
+      granted = await Permission.activityRecognition.request().isGranted;
     }
 
-    // Load persisted daily count
-    _stepCount = prefs.getInt('daily_steps_accumulated') ?? 0;
-    int lastSensorValue = prefs.getInt('last_sensor_value') ?? 0;
-
-    _stepCountStream = Pedometer.stepCountStream.listen(
-      (StepCount event) async {
-        if (!mounted) return;
-
-        int currentSensorValue = event.steps;
-        int delta = 0;
-
-        if (lastSensorValue == 0) {
-          // First install or data wipe: assume 0 delta, just sync baseline
-          lastSensorValue = currentSensorValue;
-        } else if (currentSensorValue < lastSensorValue) {
-          // Reboot detected (sensor reset): delta is the full current value
-          debugPrint(
-              "⚠️ Reboot detected: sensor $lastSensorValue -> $currentSensorValue");
-          delta = currentSensorValue;
-        } else {
-          // Normal update
-          delta = currentSensorValue - lastSensorValue;
-        }
-
-        if (delta > 0) {
-          _stepCount += delta;
-          lastSensorValue = currentSensorValue;
-
-          await prefs.setInt('daily_steps_accumulated', _stepCount);
-          await prefs.setInt('last_sensor_value', lastSensorValue);
-
-          setState(() {});
-        }
-      },
-      onError: (e) => debugPrint("Pedometer Error: $e"),
-    );
+    if (granted) {
+      _stepCountStream = Pedometer.stepCountStream.listen(
+        _onStepCount,
+        onError: (error) => debugPrint("Step Count Error: $error"),
+      );
+    }
   }
 
   Future<void> _syncToBrain({bool silent = false}) async {
@@ -269,21 +354,18 @@ class _InputScreenState extends State<InputScreen> {
       });
     }
 
-    mongo.Db? db;
-    final String? uri =
-        dotenv.env['MONGO_URI_MOBILE'] ?? dotenv.env['MONGO_URI'];
+    final db = MongoService.instance.mobileDb ?? MongoService.instance.db;
     final String collectionName = dotenv.env['COLLECTION_NAME'] ?? 'overrides';
 
-    if (uri == null) {
-      _showError("Config manquante");
+    if (db == null) {
+      _showError("DB Not Connected");
       setState(() => _isSyncing = false);
       return;
     }
 
     try {
       final String dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      db = await mongo.Db.create(uri);
-      await db.open().timeout(const Duration(seconds: 5));
+      // Db is already open
 
       final collection = db.collection(collectionName);
       final updateData = {
@@ -297,7 +379,8 @@ class _InputScreenState extends State<InputScreen> {
         "device": "android_app_mood_v2"
       };
 
-      await collection.update(mongo.where.eq('date', dateStr), updateData,
+      // Use replaceOne to guarantee only one entry per day (Idempotent)
+      await collection.replaceOne(mongo.where.eq('date', dateStr), updateData,
           upsert: true);
 
       if (!silent) {
@@ -321,7 +404,7 @@ class _InputScreenState extends State<InputScreen> {
       // Force UI reset just in case
       if (mounted) setState(() => _isSyncing = false);
     } finally {
-      await db?.close();
+      // Don't close persistent DB
       if (mounted && !silent) setState(() => _isSyncing = false);
     }
   }
@@ -346,6 +429,21 @@ class _InputScreenState extends State<InputScreen> {
       // 2. Get Position
       Position position = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.low);
+
+      // Get City Name
+      try {
+        List<Placemark> placemarks = await placemarkFromCoordinates(
+          position.latitude,
+          position.longitude,
+        );
+        if (placemarks.isNotEmpty) {
+          setState(() {
+            _cityName = placemarks.first.locality ?? "Unknown";
+          });
+        }
+      } catch (e) {
+        debugPrint("City Error: $e");
+      }
 
       // 3. Build API URL (Open-Meteo is free/no-key)
       final url = Uri.parse(
@@ -498,39 +596,52 @@ class _InputScreenState extends State<InputScreen> {
     );
   }
 
+  // --- NEW HEADER UI (Pill Style) ---
   Widget _buildHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text("MOOD",
-            style: GoogleFonts.inter(
-                fontWeight: FontWeight.w900,
-                fontSize: 32,
-                letterSpacing: -1.5)),
-        Row(
+    return Center(
+      child: GlassCard(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        borderRadius: BorderRadius.circular(30),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            if (_temperature.isNotEmpty && _temperature != "-")
-              Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: Text(_temperature,
-                    style: GoogleFonts.inter(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                        color: Colors.white70)),
-              ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                  color: Colors.white10,
-                  borderRadius: BorderRadius.circular(20)),
-              child: Text(
-                  DateFormat('dd MMM').format(DateTime.now()).toUpperCase(),
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 12)),
-            ),
+            // City
+            if (_cityName.isNotEmpty) ...[
+              Text(_cityName.toUpperCase(),
+                  style: GoogleFonts.inter(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: Colors.white70)),
+              Container(
+                  height: 12,
+                  width: 1,
+                  color: Colors.white24,
+                  margin: const EdgeInsets.symmetric(horizontal: 12)),
+            ],
+
+            // Temp
+            if (_temperature.isNotEmpty && _temperature != "-") ...[
+              Text(_temperature,
+                  style: GoogleFonts.inter(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: Colors.white)),
+              Container(
+                  height: 12,
+                  width: 1,
+                  color: Colors.white24,
+                  margin: const EdgeInsets.symmetric(horizontal: 12)),
+            ],
+
+            // Date
+            Text(DateFormat('dd MMM').format(DateTime.now()).toUpperCase(),
+                style: GoogleFonts.inter(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    color: Colors.white70)),
           ],
         ),
-      ],
+      ),
     );
   }
 
@@ -637,33 +748,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _fetchHistory() async {
-    final String? uri = dotenv.env['MONGO_URI'];
-    debugPrint(
-        "🔍 Fetching history from MONGO_URI: ${uri != null ? 'SET' : 'NULL'}");
+    final db = MongoService.instance.db;
 
-    if (uri == null) {
-      debugPrint("❌ MONGO_URI is null, cannot fetch history");
+    if (db == null) {
+      debugPrint("❌ DB Not Connected");
       if (mounted) setState(() => _isLoading = false);
       return;
     }
 
     try {
-      debugPrint("📡 Connecting to MongoDB with URI: $uri");
-      final db = await mongo.Db.create(uri);
-
-      // Add timeout to open connection
-      await db.open().timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw TimeoutException('MongoDB connection timeout after 10 seconds');
-        },
-      );
-      debugPrint("✅ Connected to MongoDB");
-
-      // Use standard ISO date query if needed, but here simple find is enough
-      debugPrint("🔎 Querying daily_logs collection...");
+      debugPrint("🔎 Querying daily_log collection...");
       final logs = await db
-          .collection('daily_logs')
+          .collection('daily_log')
           .find(mongo.where.sortBy('date', descending: true).limit(30))
           .toList();
 
@@ -694,15 +790,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
           _isLoading = false;
         });
       }
-      db.close();
-    } on TimeoutException catch (e) {
-      debugPrint("⏱️ TIMEOUT: Connection took too long - $e");
-      debugPrint(
-          "💡 Possible fixes: Check internet, increase timeout, verify MongoDB URI");
-      if (mounted) setState(() => _isLoading = false);
     } on SocketException catch (e) {
       debugPrint("🌐 SOCKET ERROR: $e");
-      if (mounted) setState(() => _isLoading = false);
       if (mounted) setState(() => _isLoading = false);
     } catch (e) {
       debugPrint("❌ Error fetching history: $e");
@@ -729,10 +818,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text("HISTORY",
-                style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 24,
-                    letterSpacing: -1)),
+                    style: GoogleFonts.inter(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 32,
+                        letterSpacing: -1.5))
+                .animate()
+                .fadeIn()
+                .slideY(),
             const SizedBox(height: 20),
             Expanded(
               child: _isLoading
@@ -827,40 +919,25 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   Future<void> _fetchStats() async {
-    final String? mainUri = dotenv.env['MONGO_URI'];
-    final String? mobileUri = dotenv.env['MONGO_URI_MOBILE'];
+    final db = MongoService.instance.db;
 
-    debugPrint(
-        "📊 StatsScreen init - mainUri: ${mainUri != null ? 'SET' : 'NULL'}, mobileUri: ${mobileUri != null ? 'SET' : 'NULL'}");
-
-    if (mainUri == null || mobileUri == null) {
-      debugPrint("❌ Missing MongoDB URIs");
+    if (db == null) {
+      debugPrint("❌ DB Not Connected");
       if (mounted) setState(() => _isLoading = false);
       return;
     }
 
     try {
-      debugPrint("📡 Connecting to main MongoDB for daily_logs...");
-      final db = await mongo.Db.create(mainUri).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () => throw TimeoutException('Main DB timeout'),
-      );
-      await db.open();
-      debugPrint("✅ Connected to main DB");
+      debugPrint("🔎 Fetching Stats from persistent DB...");
 
-      final logsColl = db.collection('daily_logs');
+      final logsColl = db.collection('daily_log');
       final logs = await logsColl.find(mongo.where.limit(100)).toList();
-      debugPrint("📊 Found ${logs.length} daily logs");
+      debugPrint("📊 Found ${logs.length} daily logs in daily_log");
 
-      debugPrint("📡 Connecting to mobile MongoDB for overrides...");
-      final dbMobile = await mongo.Db.create(mobileUri).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () => throw TimeoutException('Mobile DB timeout'),
-      );
-      await dbMobile.open();
-      debugPrint("✅ Connected to mobile DB");
+      final overridesColl =
+          MongoService.instance.mobileDb?.collection('overrides') ??
+              db.collection('overrides');
 
-      final overridesColl = dbMobile.collection('overrides');
       final overrides = await overridesColl
           .find(mongo.where.sortBy('date', descending: true).limit(7))
           .toList();
@@ -919,15 +996,8 @@ class _StatsScreenState extends State<StatsScreen> {
           _isLoading = false;
         });
       }
-      db.close();
-      dbMobile.close();
-    } on TimeoutException catch (e) {
-      debugPrint("⏱️ STATS TIMEOUT: $e");
-      debugPrint("💡 Possible fixes: Check internet, increase timeout");
-      if (mounted) setState(() => _isLoading = false);
     } on SocketException catch (e) {
       debugPrint("🌐 STATS NETWORK ERROR: $e");
-      if (mounted) setState(() => _isLoading = false);
       if (mounted) setState(() => _isLoading = false);
     } catch (e) {
       debugPrint("❌ Error fetching stats: $e");
@@ -963,7 +1033,7 @@ class _StatsScreenState extends State<StatsScreen> {
                   .animate()
                   .fadeIn()
                   .slideY(),
-              const SizedBox(height: 32),
+              const SizedBox(height: 20),
               _isLoading
                   ? const Center(
                       child: CircularProgressIndicator(color: Colors.white))
@@ -1024,6 +1094,25 @@ class _StatsScreenState extends State<StatsScreen> {
                                 titlesData: const FlTitlesData(show: false),
                                 borderData: FlBorderData(show: false),
                                 barGroups: _buildBarGroups(),
+                                barTouchData: BarTouchData(
+                                  touchTooltipData: BarTouchTooltipData(
+                                    tooltipBgColor: Colors.black87,
+                                    tooltipPadding: const EdgeInsets.all(8),
+                                    tooltipMargin: 8,
+                                    fitInsideVertically:
+                                        true, // FIX: Keeps tooltip inside chart details
+                                    fitInsideHorizontally: true,
+                                    getTooltipItem:
+                                        (group, groupIndex, rod, rodIndex) {
+                                      return BarTooltipItem(
+                                        "${rod.toY.round()}h",
+                                        const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold),
+                                      );
+                                    },
+                                  ),
+                                ),
                               ),
                             ),
                           ),
