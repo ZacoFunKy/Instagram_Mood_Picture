@@ -21,25 +21,41 @@ class DatabaseService {
   /// Ensures connection is established before returning the DB instance.
   /// Throws [Exception] if connection fails.
   Future<mongo.Db> get database async {
-    if (_isConnected && _db != null) {
+    if (_isConnected && _db != null && _db!.isConnected) {
       return _db!;
     }
 
     // If a connection attempt is in progress, wait for it
     if (_connectionCompleter != null && !_connectionCompleter!.isCompleted) {
+      debugPrint("⏳ Database: Waiting for existing connection attempt...");
       await _connectionCompleter!.future;
-      return _db!;
+      // Re-check after wait
+      if (_isConnected && _db != null && _db!.isConnected) {
+        return _db!;
+      }
     }
 
-    // Otherwise connect
-    await _init();
-    if (_db == null) throw Exception("❌ FATAL: Database not initialized");
+    // Otherwise connect (Retry Logic)
+    debugPrint("🔄 Database: Retrying connection...");
+    await _connect();
+
+    // Final check
+    if (_db == null || !_db!.isConnected) {
+      throw Exception(
+          "Connection Failed. Please check your internet connection.");
+    }
     return _db!;
   }
 
   /// Initialize connection (Lazy Loading)
-  Future<void> _init() async {
-    if (_isConnected) return;
+  Future<void> _connect() async {
+    // If already connected, skip
+    if (_isConnected && _db != null && _db!.isConnected) return;
+
+    // Avoid concurrent connection attempts
+    if (_connectionCompleter != null && !_connectionCompleter!.isCompleted) {
+      return _connectionCompleter!.future;
+    }
 
     _connectionCompleter = Completer<void>();
 
@@ -67,8 +83,9 @@ class DatabaseService {
       debugPrint("✅ MongoDB: Connected Successfully");
     } catch (e) {
       debugPrint("❌ MongoDB Connection Error: $e");
-      // We do not rethrow here to avoid crashing the app on startup,
-      // but 'database' getter will throw if accessed.
+      _isConnected = false;
+      _db = null;
+      _mobileDb = null;
     } finally {
       if (!_connectionCompleter!.isCompleted) {
         _connectionCompleter!.complete();
@@ -78,7 +95,7 @@ class DatabaseService {
 
   /// Explicit initialization call (optional, can be called in main)
   void init() {
-    _init(); // Fire and forget
+    _connect(); // Fire and forget
   }
 
   /// Helper to get the overrides collection

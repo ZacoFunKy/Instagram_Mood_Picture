@@ -18,6 +18,7 @@ class StatsScreen extends StatefulWidget {
 
 class _StatsScreenState extends State<StatsScreen> {
   bool _isLoading = true;
+  String? _errorMessage;
 
   // Stats Data
   String _topMood = "-";
@@ -35,6 +36,11 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   Future<void> _fetchStats() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
       final collection = await DatabaseService.instance.logsCollection;
 
@@ -54,7 +60,7 @@ class _StatsScreenState extends State<StatsScreen> {
       _calculateAverages(entries);
       _calculateMoodDistribution(entries);
 
-      // Get recent 7 days for charts (ensure sorted ascending for graph)
+      // Get recent 7 days for charts
       _recentEntries = entries.take(7).toList().reversed.toList();
 
       if (mounted) {
@@ -62,7 +68,13 @@ class _StatsScreenState extends State<StatsScreen> {
       }
     } catch (e) {
       debugPrint("❌ Stats Error: $e");
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage =
+              "Unable to load analytics.\nCheck your internet connection.";
+        });
+      }
     }
   }
 
@@ -118,56 +130,82 @@ class _StatsScreenState extends State<StatsScreen> {
                   .fadeIn()
                   .slideY(),
               const SizedBox(height: 20),
-              _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(color: Colors.white))
-                  : Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                                child: _buildInfoCard(
-                                    "TOP MOOD", _topMood, AppTheme.neonPurple)),
-                            const SizedBox(width: 16),
-                            Expanded(
-                                child: _buildInfoCard("AVG SLEEP", _avgSleep,
-                                    AppTheme.neonGreen)),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                                child: _buildInfoCard(
-                                    "ENERGY", _avgEnergy, Colors.amber)),
-                            const SizedBox(width: 16),
-                            Expanded(
-                                child: _buildInfoCard(
-                                    "STRESS", _avgStress, AppTheme.neonPink)),
-                          ],
-                        ),
-                        const SizedBox(height: 48),
-
-                        // Charts
-                        if (_moodDistribution.isNotEmpty) ...[
-                          _buildSectionHeader("MOOD DISTRIBUTION"),
-                          const SizedBox(height: 24),
-                          _buildPieChart(),
-                          const SizedBox(height: 48),
-                        ],
-
-                        _buildSectionHeader("SLEEP TREND (7 DAYS)"),
-                        const SizedBox(height: 24),
-                        _buildBarChart(),
-                      ]
-                          .animate(interval: 100.ms)
-                          .fadeIn()
-                          .slideY(begin: 0.1, end: 0),
-                    ),
+              _buildContent(),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildContent() {
+    if (_isLoading) {
+      return const Center(
+          child: CircularProgressIndicator(color: Colors.white));
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Column(
+          children: [
+            const SizedBox(height: 48),
+            const Icon(Icons.error_outline, color: Colors.white54, size: 48),
+            const SizedBox(height: 16),
+            Text(_errorMessage!,
+                textAlign: TextAlign.center, style: AppTheme.subText),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _fetchStats,
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.neonPurple),
+              child: const Text("RETRY", style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_recentEntries.isEmpty) {
+      return Center(
+          child: Text("No stats available yet.", style: AppTheme.subText));
+    }
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+                child:
+                    _buildInfoCard("TOP MOOD", _topMood, AppTheme.neonPurple)),
+            const SizedBox(width: 16),
+            Expanded(
+                child:
+                    _buildInfoCard("AVG SLEEP", _avgSleep, AppTheme.neonGreen)),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(child: _buildInfoCard("ENERGY", _avgEnergy, Colors.amber)),
+            const SizedBox(width: 16),
+            Expanded(
+                child: _buildInfoCard("STRESS", _avgStress, AppTheme.neonPink)),
+          ],
+        ),
+        const SizedBox(height: 48),
+
+        // Charts
+        if (_moodDistribution.isNotEmpty) ...[
+          _buildSectionHeader("MOOD DISTRIBUTION"),
+          const SizedBox(height: 24),
+          _buildPieChart(),
+          const SizedBox(height: 48),
+        ],
+
+        _buildSectionHeader("SLEEP TREND (7 DAYS)"),
+        const SizedBox(height: 24),
+        _buildBarChart(),
+      ].animate(interval: 100.ms).fadeIn().slideY(begin: 0.1, end: 0),
     );
   }
 
@@ -270,8 +308,6 @@ class _StatsScreenState extends State<StatsScreen> {
 
   List<BarChartGroupData> _buildBarGroups() {
     int x = 0;
-    // We expect 7 days. If fewer, pad with 0?
-    // User requested clean code: let's just show what we have.
     return _recentEntries.map((e) {
       final y = e.sleepHours;
       return BarChartGroupData(x: x++, barRods: [

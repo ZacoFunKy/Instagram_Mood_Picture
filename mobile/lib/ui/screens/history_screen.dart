@@ -17,6 +17,7 @@ class HistoryScreen extends StatefulWidget {
 class _HistoryScreenState extends State<HistoryScreen> {
   List<MoodEntry> _history = [];
   bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -25,18 +26,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _fetchHistory() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
       final collection = await DatabaseService.instance.logsCollection;
 
-      // Query: Sort by date descending, limit 30
       final logs = await collection
           .find(mongo.where.sortBy('date', descending: true).limit(30))
           .toList();
 
       debugPrint("📊 History: Found ${logs.length} entries");
 
-      final List<MoodEntry> entries =
-          logs.map((json) => MoodEntry.fromJson(json)).toList();
+      final entries = logs.map((json) => MoodEntry.fromJson(json)).toList();
 
       if (mounted) {
         setState(() {
@@ -47,9 +51,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
     } catch (e) {
       debugPrint("❌ History Error: $e");
       if (mounted) {
-        setState(() => _isLoading = false);
-        // Silently fail or show toast? Senior Architect says: Log it, don't crash UI.
-        // Ideally show retry button, but for now just empty state.
+        setState(() {
+          _isLoading = false;
+          _errorMessage =
+              "Unable to load history.\nCheck your internet connection.";
+        });
       }
     }
   }
@@ -68,19 +74,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 .slideY(),
             const SizedBox(height: 20),
             Expanded(
-              child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(color: Colors.white))
-                  : _history.isEmpty
-                      ? Center(
-                          child: Text("No data yet.", style: AppTheme.subText))
-                      : ListView.builder(
-                          itemCount: _history.length,
-                          itemBuilder: (context, index) {
-                            final entry = _history[index];
-                            return _buildHistoryItem(entry, index);
-                          },
-                        ),
+              child: _buildContent(),
             ),
           ],
         ),
@@ -88,12 +82,52 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _buildHistoryItem(MoodEntry entry, int index) {
-    // Logic for determining "Matin/Midi/Soir" isn't explicitly in MoodEntry
-    // unless we saved multiple entries per day.
-    // The current DB schema seems to overwrite 'date' so we have 1 entry per day.
-    // So I will display the daily summary.
+  Widget _buildContent() {
+    if (_isLoading) {
+      return const Center(
+          child: CircularProgressIndicator(color: Colors.white));
+    }
 
+    if (_errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.signal_wifi_off, color: Colors.white54, size: 48),
+            const SizedBox(height: 16),
+            Text(
+              _errorMessage!,
+              textAlign: TextAlign.center,
+              style: AppTheme.subText.copyWith(fontSize: 14),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _fetchHistory,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.neonPurple,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text("RETRY"),
+            )
+          ],
+        ),
+      );
+    }
+
+    if (_history.isEmpty) {
+      return Center(child: Text("No data yet.", style: AppTheme.subText));
+    }
+
+    return ListView.builder(
+      itemCount: _history.length,
+      itemBuilder: (context, index) {
+        final entry = _history[index];
+        return _buildHistoryItem(entry, index);
+      },
+    );
+  }
+
+  Widget _buildHistoryItem(MoodEntry entry, int index) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
       child: GlassCard(
