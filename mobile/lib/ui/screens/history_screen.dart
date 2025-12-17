@@ -56,7 +56,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         setState(() {
           _isLoading = false;
           _errorMessage =
-              "Unable to load history.\nCheck your internet connection.";
+              "Error: $e\n\nCheck internet or restart app."; // Show actual error
         });
       }
     }

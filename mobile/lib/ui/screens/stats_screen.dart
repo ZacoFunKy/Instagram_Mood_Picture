@@ -74,7 +74,7 @@ class _StatsScreenState extends State<StatsScreen> {
         setState(() {
           _isLoading = false;
           _errorMessage =
-              "Unable to load analytics.\nCheck your internet connection.";
+              "Error: $e\n\nCheck internet or restart app."; // Show actual error
         });
       }
     }
