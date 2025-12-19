@@ -175,16 +175,29 @@ class WMOInterpreter:
 # LOCATION SERVICE
 # ============================================================================
 
-def get_target_location() -> Tuple[float, float, str]:
+def get_target_location(manual_city: Optional[str] = None) -> Tuple[float, float, str]:
     """
     Determines which location to use for weather.
     Priority:
-    1. Last known location from 'daily_logs' in Database (within last 5 days).
-    2. Default: Bordeaux.
+    1. Manual Override (from Mobile Sync 'overrides').
+    2. Last known location from 'daily_logs' in Database (within last 5 days).
+    3. Default: Bordeaux.
 
     Returns:
         Tuple (latitude, longitude, city_name)
     """
+    if manual_city:
+        try:
+            logger.info(f"Using manual location override: {manual_city}")
+            geolocator = Nominatim(user_agent="mood_predictor_bot")
+            location = geolocator.geocode(manual_city)
+            if location:
+                 return location.latitude, location.longitude, manual_city
+            else:
+                 logger.warning(f"Could not geocode manual city '{manual_city}'. Falling back.")
+        except Exception as e:
+            logger.error(f"Error geocoding manual city: {e}")
+
     mongo_uri = os.getenv("MONGO_URI")
     if not mongo_uri:
         logger.warning("MONGO_URI not set. Using Default (Bordeaux).")
@@ -231,13 +244,13 @@ class WeatherAPIClient:
     def __init__(self) -> None:
         pass # Lat/Lon fetched per request now
 
-    def fetch_daily_forecast(self) -> Optional[WeatherData]:
+    def fetch_daily_forecast(self, manual_city: Optional[str] = None) -> Optional[WeatherData]:
         """
         Fetches daily weather forecast from Open-Meteo API.
         The script runs at 3am, so this returns the forecast for the upcoming day.
         """
         
-        lat, lon, city = get_target_location()
+        lat, lon, city = get_target_location(manual_city)
         
         params = {
             "latitude": lat,
@@ -298,7 +311,7 @@ class WeatherAPIClient:
 # PUBLIC API
 # ============================================================================
 
-def get_bordeaux_weather() -> str:
+def get_bordeaux_weather(manual_city: Optional[str] = None) -> str:
     """
     Fetches daily weather forecast (auto-location or Bordeaux).
     Returns: Human-readable weather summary string.
@@ -306,7 +319,7 @@ def get_bordeaux_weather() -> str:
     client = WeatherAPIClient()
 
     try:
-        weather = client.fetch_daily_forecast()
+        weather = client.fetch_daily_forecast(manual_city)
 
         if weather is None:
             logger.warning("Weather forecast unavailable")
@@ -320,7 +333,7 @@ def get_bordeaux_weather() -> str:
         return "Weather unavailable (Error)."
 
 
-def get_bordeaux_weather_detailed() -> Optional[Tuple[str, Dict[str, Any]]]:
+def get_bordeaux_weather_detailed(manual_city: Optional[str] = None) -> Optional[Tuple[str, Dict[str, Any]]]:
     """
     Fetches detailed weather forecast with metadata.
     Returns: Tuple of (summary_string, metadata_dict) or None.
@@ -328,7 +341,7 @@ def get_bordeaux_weather_detailed() -> Optional[Tuple[str, Dict[str, Any]]]:
     client = WeatherAPIClient()
 
     try:
-        weather = client.fetch_daily_forecast()
+        weather = client.fetch_daily_forecast(manual_city)
 
         if weather is None:
             return None

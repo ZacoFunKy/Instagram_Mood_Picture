@@ -37,6 +37,7 @@ from src.adapters.clients import (
     weather as weather_client
 )
 from src.adapters.clients.gemini import get_execution_type
+from src.utils.db_maintenance import run_maintenance
 
 
 # ============================================================================
@@ -153,7 +154,8 @@ def save_daily_log(
     music_summary: str,
     calendar_summary: str,
     execution_type: str,
-    dry_run: bool
+    dry_run: bool,
+    location: str = "Bordeaux"
 ) -> None:
     """
     Saves execution log to MongoDB.
@@ -180,6 +182,8 @@ def save_daily_log(
             "mood_selected": mood,
             "music_summary": music_summary[:200] + "..." if len(music_summary) > 200 else music_summary,
             "calendar_summary": calendar_summary[:500] if len(calendar_summary) > 500 else calendar_summary,
+            "week_rhythm": "Standard", # Placeholder
+            "location": location,
             "execution_type": execution_type
         }
 
@@ -207,12 +211,12 @@ def get_calendar_summary() -> str:
         return f"Error fetching calendar: {calendar_error}"
 
 
-def get_weather_summary() -> str:
+def get_weather_summary(manual_city: str = None) -> str:
     """
-    Fetches weather forecast for Bordeaux.
+    Fetches weather forecast for Bordeaux or manual city.
     """
     try:
-        weather = weather_client.get_bordeaux_weather()
+        weather = weather_client.get_bordeaux_weather(manual_city)
         return weather
     except Exception as weather_error:
         logger.error(f"Weather fetch failed: {weather_error}")
@@ -426,18 +430,24 @@ def main() -> None:
     logger.info(f"Timestamp: {now_dt.strftime('%Y-%m-%d %H:%M:%S')}, Weekday: {weekday}, Type: {current_exec_type}")
 
     # ========================================================================
+    # STEP 0: Database Maintenance (Auto-Clean)
+    # ========================================================================
+    if not args.dry_run:
+        try:
+             run_maintenance()
+        except Exception as maintenance_error:
+             logger.warning(f"Database maintenance failed (non-blocking): {maintenance_error}")
+
+    # ========================================================================
     # STEP 1: Collect Context Data
     # ========================================================================
     logger.info(">>> STEP 1: Collecting context data...")
 
-    historical_moods = fetch_historical_moods(weekday, current_exec_type, args.dry_run)
-    calendar_summary = get_calendar_summary()
-    weather_summary = get_weather_summary()
-    
     # Check for Mobile Overrides
     feedback_metrics = None
     manual_sleep = None
     steps_count = None
+    override_location = None
 
     try:
         current_date_str = now_dt.strftime("%Y-%m-%d")
@@ -457,13 +467,26 @@ def main() -> None:
             }
             logger.info(f"!!! USER FEEDBACK RECEIVED: {feedback_metrics} !!!")
         
-        # 3. Extract Step Count (Physical Activity Data)
+        # 3. Extract Step Count
         steps_count = overrides.get("steps_count")
         if steps_count:
             logger.info(f"!!! STEP COUNT: {steps_count} steps !!!")
 
+        # 4. Extract Location Override
+        override_location = overrides.get("location")
+        if override_location:
+            logger.info(f"!!! LOCATION OVERRIDE: {override_location} !!!")
+
     except Exception as override_error:
         logger.warning(f"Failed to check mobile feedback: {override_error}")
+
+    try:
+        historical_moods = fetch_historical_moods(weekday, current_exec_type, args.dry_run)
+        calendar_summary = get_calendar_summary()
+        weather_summary = get_weather_summary(override_location)
+    except Exception as context_error:
+        logger.error(f"Context collection failed: {context_error}")
+        weather_summary = "Weather Error"
 
     try:
         music_summary, sleep_info, music_metrics = get_music_summary_for_window(
@@ -553,7 +576,11 @@ def main() -> None:
     # STEP 4: Save Execution Log
     # ========================================================================
     logger.info(">>> STEP 4: Saving execution log...")
-    save_daily_log(weekday, mood, music_summary, calendar_summary, current_exec_type, args.dry_run)
+    
+    # Determine which location was actually used
+    final_location = override_location if override_location else "Bordeaux (Default/History)"
+    
+    save_daily_log(weekday, mood, music_summary, calendar_summary, current_exec_type, args.dry_run, location=final_location)
 
     logger.info("--- Execution Complete ---")
 

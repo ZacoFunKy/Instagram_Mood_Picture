@@ -5,6 +5,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/intl.dart';
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 
 import 'database_service.dart';
 import '../models/mood_entry.dart';
@@ -26,21 +28,37 @@ void callbackDispatcher() {
         await DatabaseService.instance.database
             .timeout(const Duration(seconds: 30));
 
-        // 3. Get latest steps (Mock/Stored or Pedometer if accessible)
-        // Note: Pedometer streams don't work well in background on correct Android V.
-        // We usually read from SharedPreferences where we cached the last known step count,
-        // OR we use a specific Sensor API.
-        // For this implementation, we will try to sync whatever is currently cached or accessible.
-
-        // A robust implementation would require `android_alarm_manager` to wake up
-        // and read the sensor, but `workmanager` is constrained.
-        // Let's at least sync the "Last Known State".
-
+        // 3. Get latest steps
         final prefs = await SharedPreferences.getInstance();
         int steps = prefs.getInt('last_known_steps') ?? 0;
 
-        // 4. Perform Sync
-        await _performBackgroundSync(steps);
+        // 4. Get Location (Best Effort)
+        String? city;
+        try {
+          // Check permission first (though WorkManager might skip if restricted)
+          LocationPermission permission = await Geolocator.checkPermission();
+          if (permission == LocationPermission.whileInUse ||
+              permission == LocationPermission.always) {
+            Position position = await Geolocator.getCurrentPosition(
+                desiredAccuracy: LocationAccuracy.medium,
+                timeLimit: const Duration(seconds: 10));
+
+            List<Placemark> placemarks = await placemarkFromCoordinates(
+                position.latitude, position.longitude);
+
+            if (placemarks.isNotEmpty) {
+              city = placemarks.first.locality;
+              debugPrint("📍 Background Location: $city");
+            }
+          } else {
+            debugPrint("⚠️ Background Location Permission Missing");
+          }
+        } catch (locError) {
+          debugPrint("⚠️ Background Location Error: $locError");
+        }
+
+        // 5. Perform Sync
+        await _performBackgroundSync(steps, city);
 
         return Future.value(true);
       } catch (e) {
@@ -52,7 +70,7 @@ void callbackDispatcher() {
   });
 }
 
-Future<void> _performBackgroundSync(int steps) async {
+Future<void> _performBackgroundSync(int steps, String? location) async {
   final collection = await DatabaseService.instance.overrides;
 
   // We can only sync what we know. In background, we might not have access to
@@ -73,11 +91,16 @@ Future<void> _performBackgroundSync(int steps) async {
 
   // Safer Background Update: Partial Update ($set)
   // We don't want to wipe Sleep/Energy if they were set in UI.
-  await collection.update(
-      mongo.where.eq('date', dateStr),
-      mongo.modify
-          .set('steps', steps)
-          .set('lastUpdated', DateTime.now().toIso8601String()),
+  // Safer Background Update: Partial Update ($set)
+  var modifier = mongo.modify
+      .set('steps', steps)
+      .set('lastUpdated', DateTime.now().toIso8601String());
+
+  if (location != null) {
+    modifier = modifier.set('location', location);
+  }
+
+  await collection.update(mongo.where.eq('date', dateStr), modifier,
       upsert: true);
 
   debugPrint("✅ Background Sync Complete: $steps steps");

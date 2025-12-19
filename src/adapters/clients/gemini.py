@@ -15,7 +15,7 @@ from datetime import datetime
 from typing import Dict, Optional, List, Any, Union
 from enum import Enum
 
-import google.generativeai as genai
+from google import genai
 
 from src.core.analyzer import MoodDataAnalyzer
 
@@ -599,13 +599,15 @@ def predict_mood(
         logger.error("No GEMINI_API_KEY found in environment.")
         return "chill"
 
-    genai.configure(api_key=api_key)
+    client = genai.Client(api_key=api_key)
 
     for model_name in PREFERRED_MODELS:
         try:
             logger.info(f"Predicting with model: {model_name}")
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt
+            )
             mood = _extract_valid_mood(response.text)
             
             if mood:
