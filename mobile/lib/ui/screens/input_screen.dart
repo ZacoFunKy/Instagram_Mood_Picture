@@ -52,6 +52,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _initServices();
     _loadCachedLocation(); // Instant Load
+    _loadCachedInputs(); // Instant Load Inputs
     _fetchWeather(); // Background Refresh
     _checkTodayData(); // Check persistence
   }
@@ -91,6 +92,14 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
             _socialLevel = entry.social ?? 0.5;
             _lastLoadedDate = dateStr;
           });
+
+          // Update cache with latest DB truth
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setDouble('cached_sleep', _sleepHours);
+          await prefs.setDouble('cached_energy', _energyLevel);
+          await prefs.setDouble('cached_stress', _stressLevel);
+          await prefs.setDouble('cached_social', _socialLevel);
+
           debugPrint("✅ Persistence: Restored today's values");
         }
       } else {
@@ -122,6 +131,31 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
       debugPrint("🔄 App Resumed: Retrying Weather/Location...");
       _fetchWeather();
       _checkTodayData(); // Re-check in case background sync happened
+    }
+  }
+
+  Future<void> _loadCachedInputs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (mounted) {
+        setState(() {
+          if (prefs.containsKey('cached_sleep')) {
+            _sleepHours = prefs.getDouble('cached_sleep') ?? 7.5;
+          }
+          if (prefs.containsKey('cached_energy')) {
+            _energyLevel = prefs.getDouble('cached_energy') ?? 0.5;
+          }
+          if (prefs.containsKey('cached_stress')) {
+            _stressLevel = prefs.getDouble('cached_stress') ?? 0.5;
+          }
+          if (prefs.containsKey('cached_social')) {
+            _socialLevel = prefs.getDouble('cached_social') ?? 0.5;
+          }
+        });
+        debugPrint("💾 Loaded Cached Inputs check");
+      }
+    } catch (e) {
+      debugPrint("⚠️ Cache Load Error: $e");
     }
   }
 
@@ -196,6 +230,13 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
       debugPrint("✅ Synced: ${entry.toJson()}");
 
       if (!silent) {
+        // Cache locally for next startup
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setDouble('cached_sleep', _sleepHours);
+        await prefs.setDouble('cached_energy', _energyLevel);
+        await prefs.setDouble('cached_stress', _stressLevel);
+        await prefs.setDouble('cached_social', _socialLevel);
+
         await HapticFeedback.heavyImpact();
         if (mounted) {
           setState(() {
