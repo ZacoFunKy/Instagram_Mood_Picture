@@ -65,7 +65,7 @@ class DatabaseMaintainer:
                 "STARTING CLEANUP..."
             )
             
-            self._clean_collection(db, 'daily_log', 'date')
+            self._clean_collection(db, 'daily_logs', 'date')
             self._clean_collection(db, 'overrides', 'date')
             
             # Check size again
