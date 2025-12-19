@@ -60,11 +60,11 @@ class DatabaseService {
     _connectionCompleter = Completer<void>();
 
     // Use local mutable variables
-    String? uriString = dotenv.env['MONGO_URI'];
+    String? uriString = dotenv.env['MONGODB_URI'];
     String? mobileUriString = dotenv.env['MONGO_URI_MOBILE'];
 
     if (uriString == null) {
-      debugPrint("❌ ERROR: MONGO_URI is missing in .env");
+      debugPrint("❌ ERROR: MONGODB_URI is missing in .env");
       _connectionCompleter!.complete();
       return;
     }

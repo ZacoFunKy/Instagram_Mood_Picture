@@ -198,9 +198,9 @@ def get_target_location(manual_city: Optional[str] = None) -> Tuple[float, float
         except Exception as e:
             logger.error(f"Error geocoding manual city: {e}")
 
-    mongo_uri = os.getenv("MONGO_URI")
+    mongo_uri = os.getenv("MONGODB_URI")
     if not mongo_uri:
-        logger.warning("MONGO_URI not set. Using Default (Bordeaux).")
+        logger.warning("MONGODB_URI not set. Using Default (Bordeaux).")
         return DEFAULT_LATITUDE, DEFAULT_LONGITUDE, "Bordeaux"
 
     try:

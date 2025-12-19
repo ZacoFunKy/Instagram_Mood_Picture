@@ -297,7 +297,8 @@ def _classify_vibe(valence: float, energy: float, tempo: float) -> str:
 
 def get_music_summary_for_window(
     run_hour: int = 3,
-    calendar_summary: str = ""
+    calendar_summary: str = "",
+    override_sleep_hours: float = None
 ) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
     """
     Fetches and enriches music listsening history.
@@ -341,11 +342,16 @@ def get_music_summary_for_window(
             run_hour=run_hour
         )
 
-        logger.info(
-            f"Sleep estimate: Bedtime {sleep_info['bedtime']}, "
-            f"Wake {sleep_info['wake_time']}, "
-            f"Duration {sleep_info['sleep_hours']}h"
-        )
+        if override_sleep_hours is not None:
+             sleep_info["sleep_hours"] = float(override_sleep_hours)
+             sleep_info["status"] = "MANUAL_OVERRIDE" 
+             logger.info(f"!!! SLEEP OVERRIDE APPLIED: {sleep_info['sleep_hours']}h (Manual Input) !!!")
+        else:
+             logger.info(
+                f"Sleep estimate: Bedtime {sleep_info['bedtime']}, "
+                f"Wake {sleep_info['wake_time']}, "
+                f"Duration {sleep_info['sleep_hours']}h"
+            )
 
         vibe_summary, music_metrics = analyze_music_metrics(enriched_tracks)
         logger.info(f"Music analysis: {vibe_summary}")
@@ -491,14 +497,11 @@ def main() -> None:
     try:
         music_summary, sleep_info, music_metrics = get_music_summary_for_window(
             run_hour=3,
-            calendar_summary=calendar_summary
+            calendar_summary=calendar_summary,
+            override_sleep_hours=manual_sleep
         )
         
-        # Apply Sleep Override
-        if manual_sleep is not None:
-             sleep_info["sleep_hours"] = float(manual_sleep)
-             sleep_info["status"] = "MANUAL_OVERRIDE" 
-             logger.info(f"Sleep info overridden by App: {manual_sleep}h")
+        # Override is now handled inside the function for better logging
              
     except Exception as music_error:
         logger.error(f"Music collection failed: {music_error}")
