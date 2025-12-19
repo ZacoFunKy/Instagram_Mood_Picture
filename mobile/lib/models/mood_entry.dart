@@ -33,9 +33,12 @@ class MoodEntry {
       social: (json['feedback_social'] as num?)?.toDouble(), // Nullable
       steps: (json['steps_count'] as num?)?.toInt() ?? 0,
       location: json['location'] as String?,
-      lastUpdated: json['last_updated'] != null
-          ? DateTime.tryParse(json['last_updated'] as String) ?? DateTime.now()
-          : DateTime.now(),
+      lastUpdated: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'] as String) ?? DateTime.now()
+          : (json['last_updated'] != null
+              ? DateTime.tryParse(json['last_updated'] as String) ??
+                  DateTime.now()
+              : DateTime.now()),
       device: json['device'] as String? ?? 'unknown',
       moodSelected: json['mood_selected'] as String?,
     );

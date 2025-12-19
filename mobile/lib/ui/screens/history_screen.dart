@@ -6,7 +6,6 @@ import 'package:intl/intl.dart';
 import '../../models/mood_entry.dart';
 import '../../services/database_service.dart';
 import '../../utils/app_theme.dart';
-import '../widgets/glass_card.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -131,112 +130,123 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildHistoryItem(MoodEntry entry, int index) {
-    bool isSynced = true; // For now assuming all history is synced if from DB
+    bool isSynced = true;
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
-      child: GlassCard(
-        padding: const EdgeInsets.all(16),
-        borderRadius: BorderRadius.circular(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    // Date Formatting
+    final date = DateTime.parse(entry.date);
+    final dayNum = DateFormat('d').format(date);
+    final monthStr = DateFormat('MMM').format(date).toUpperCase();
+    final dayName = DateFormat('EEEE').format(date).toUpperCase();
+    final timeOfDay = _formatTimeOfDay(entry.lastUpdated);
+
+    Color moodColor = _getMoodColor(entry.moodSelected);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Left: Date Block
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(dayNum,
+                  style:
+                      AppTheme.headerLarge.copyWith(fontSize: 24, height: 1.0)),
+              Text(monthStr,
+                  style: AppTheme.subText
+                      .copyWith(fontSize: 12, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(width: 16),
+
+          // Middle: Context + Mood
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    if (isSynced)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: Icon(Icons.cloud_done,
-                            color: Colors.white30, size: 14),
-                      ),
-                    Text(
-                      _formatDate(entry),
-                      style: AppTheme.subText
-                          .copyWith(fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
+                    Text("$dayName • $timeOfDay",
+                        style: AppTheme.subText
+                            .copyWith(fontSize: 10, letterSpacing: 0.5)),
+                    if (isSynced) ...[
+                      const SizedBox(width: 6),
+                      Icon(Icons.cloud_done,
+                          color: AppTheme.neonGreen.withOpacity(0.6), size: 10)
+                    ]
                   ],
                 ),
+                const SizedBox(height: 4),
                 if (entry.moodSelected != null)
-                  Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                          color: Colors.white12,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white10)),
-                      child: Text(entry.moodSelected!.toUpperCase(),
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 10,
-                              letterSpacing: 1.0)))
+                  Text(
+                    entry.moodSelected!.toUpperCase(),
+                    style: TextStyle(
+                        color: moodColor,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
+                        letterSpacing: 0.5),
+                  )
+                else
+                  Text("PROCESSING...",
+                      style: AppTheme.subText.copyWith(fontSize: 14)),
               ],
             ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                if (entry.sleepHours > 0)
-                  _metricPill("💤 ${entry.sleepHours}h"),
-                if (entry.energy != null && entry.energy! > 0)
-                  _metricPill("⚡ ${(entry.energy! * 100).toInt()}%"),
-                if (entry.stress != null && entry.stress! > 0)
-                  _metricPill("🧠 ${(entry.stress! * 100).toInt()}%"),
-                if (entry.social != null && entry.social! > 0)
-                  _metricPill("💬 ${(entry.social! * 100).toInt()}%"),
-                if (entry.steps > 0)
-                  _metricPill(
-                      "👟 ${NumberFormat('#,###').format(entry.steps)}"),
-              ],
-            )
-          ],
-        ),
-      ).animate().fadeIn(delay: (50 * index).ms).slideX(),
+          ),
+
+          // Right: Metrics Horizontal
+          Row(
+            children: [
+              if (entry.sleepHours > 0)
+                _miniMetric(Icons.bedtime, "${entry.sleepHours}h"),
+              const SizedBox(width: 8),
+              if (entry.steps > 0)
+                _miniMetric(Icons.directions_walk,
+                    "${(entry.steps / 1000).toStringAsFixed(1)}k"),
+            ],
+          )
+        ],
+      ),
+    ).animate().fadeIn(delay: (50 * index).ms).slideX();
+  }
+
+  Widget _miniMetric(IconData icon, String value) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.white54, size: 14),
+        const SizedBox(width: 4),
+        Text(value,
+            style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+                fontWeight: FontWeight.w600)),
+      ],
     );
   }
 
-  Widget _metricPill(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-          border: Border.all(color: Colors.white12),
-          borderRadius: BorderRadius.circular(12)),
-      child: Text(text,
-          style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: Colors.white70)),
-    );
+  String _formatTimeOfDay(DateTime date) {
+    date = date.toLocal();
+    int hour = date.hour;
+    if (hour < 5) return "NUIT";
+    if (hour < 12) return "MATIN";
+    if (hour < 18) return "APRÈS-MIDI";
+    return "SOIR";
   }
 
-  String _formatDate(MoodEntry entry) {
-    try {
-      final date = DateTime.parse(entry.date); // This is YYYY-MM-DD
-      // Use local day name
-      String dayStr = DateFormat('EEEE d MMMM').format(date).toUpperCase();
-
-      // Determine Time of Day correctly
-      // We need to ensure entry.lastUpdated is in Local Time or handled correctly
-      // entry.lastUpdated comes from MongoDB ISO string, usually UTC.
-
-      DateTime localUpdated = entry.lastUpdated.toLocal();
-      String timeOfDay = "MATIN";
-      int hour = localUpdated.hour;
-
-      if (hour < 12) {
-        timeOfDay = "MATIN";
-      } else if (hour < 18) {
-        timeOfDay = "APRÈS-MIDI";
-      } else {
-        timeOfDay = "SOIR";
-      }
-
-      return "$dayStr • $timeOfDay";
-    } catch (_) {
-      return entry.date;
-    }
+  Color _getMoodColor(String? mood) {
+    if (mood == null) return Colors.white;
+    final m = mood.toLowerCase();
+    if (m.contains('happy') || m.contains('festif')) return AppTheme.neonGreen;
+    if (m.contains('sad') || m.contains('mélancolique')) return Colors.blueGrey;
+    if (m.contains('calm') || m.contains('chill')) return Colors.cyan;
+    if (m.contains('explosif') || m.contains('agressif'))
+      return AppTheme.neonPink;
+    return AppTheme.neonPurple;
   }
 }

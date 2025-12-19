@@ -184,7 +184,8 @@ def save_daily_log(
             "calendar_summary": calendar_summary[:500] if len(calendar_summary) > 500 else calendar_summary,
             "week_rhythm": "Standard", # Placeholder
             "location": location,
-            "execution_type": execution_type
+            "execution_type": execution_type,
+            "created_at": datetime.datetime.now().isoformat()
         }
 
         mongo_client.save_log(logs_collection, entry)
