@@ -147,9 +147,9 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   Future<void> _syncToBrain({bool silent = false}) async {
     if (!silent) setState(() => _isSyncing = true);
 
-    final uri = dotenv.env['MONGODB_URI'];
+    final uri = dotenv.env['MONGODB_URI'] ?? dotenv.env['MONGO_URI'];
     if (uri == null || uri.isEmpty) {
-      debugPrint("❌ ERROR: MONGODB_URI is missing or empty.");
+      debugPrint("❌ ERROR: MONGODB_URI (or MONGO_URI) is missing or empty.");
       if (!silent) _showError("Config Error: Missing Database URI");
       if (mounted) setState(() => _isSyncing = false);
       return;
