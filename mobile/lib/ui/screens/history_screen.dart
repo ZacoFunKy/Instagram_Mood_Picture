@@ -131,46 +131,65 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildHistoryItem(MoodEntry entry, int index) {
+    bool isSynced = true; // For now assuming all history is synced if from DB
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
       child: GlassCard(
         padding: const EdgeInsets.all(16),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  _formatDate(entry),
-                  style: AppTheme.subText.copyWith(fontSize: 12),
+                Row(
+                  children: [
+                    if (isSynced)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: Icon(Icons.cloud_done,
+                            color: Colors.white30, size: 14),
+                      ),
+                    Text(
+                      _formatDate(entry),
+                      style: AppTheme.subText
+                          .copyWith(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ],
                 ),
                 if (entry.moodSelected != null)
                   Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                          horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                          color: Colors.white10,
-                          borderRadius: BorderRadius.circular(8)),
-                      child: Text(entry.moodSelected!,
+                          color: Colors.white12,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white10)),
+                      child: Text(entry.moodSelected!.toUpperCase(),
                           style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 10)))
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                              letterSpacing: 1.0)))
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                _metricPill("💤 ${entry.sleepHours}h"),
-                if (entry.energy != null)
+                if (entry.sleepHours > 0)
+                  _metricPill("💤 ${entry.sleepHours}h"),
+                if (entry.energy != null && entry.energy! > 0)
                   _metricPill("⚡ ${(entry.energy! * 100).toInt()}%"),
-                if (entry.stress != null)
+                if (entry.stress != null && entry.stress! > 0)
                   _metricPill("🧠 ${(entry.stress! * 100).toInt()}%"),
-                if (entry.social != null)
+                if (entry.social != null && entry.social! > 0)
                   _metricPill("💬 ${(entry.social! * 100).toInt()}%"),
-                _metricPill("👟 ${entry.steps}"),
+                if (entry.steps > 0)
+                  _metricPill(
+                      "👟 ${NumberFormat('#,###').format(entry.steps)}"),
               ],
             )
           ],
@@ -195,12 +214,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   String _formatDate(MoodEntry entry) {
     try {
-      final date = DateTime.parse(entry.date);
+      final date = DateTime.parse(entry.date); // This is YYYY-MM-DD
+      // Use local day name
       String dayStr = DateFormat('EEEE d MMMM').format(date).toUpperCase();
 
-      // Determine Time of Day
+      // Determine Time of Day correctly
+      // We need to ensure entry.lastUpdated is in Local Time or handled correctly
+      // entry.lastUpdated comes from MongoDB ISO string, usually UTC.
+
+      DateTime localUpdated = entry.lastUpdated.toLocal();
       String timeOfDay = "MATIN";
-      int hour = entry.lastUpdated.hour;
+      int hour = localUpdated.hour;
 
       if (hour < 12) {
         timeOfDay = "MATIN";

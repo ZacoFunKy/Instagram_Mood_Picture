@@ -40,6 +40,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   String _temperature = "";
   String _cityName = "";
   bool _weatherLoading = false;
+  String? _lastLoadedDate;
 
   // Stream Subscription
   StreamSubscription<int>? _stepSubscription;
@@ -50,7 +51,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initServices();
-    _fetchWeather();
+    _loadCachedLocation(); // Instant Load
+    _fetchWeather(); // Background Refresh
     _checkTodayData(); // Check persistence
   }
 
@@ -58,11 +60,15 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   Future<void> _checkTodayData() async {
     try {
       final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      if (_lastLoadedDate == dateStr) return; // Prevent double loads
+
       // Short timeout for UI initialization
       final collection = await DatabaseService.instance.overrides
           .timeout(const Duration(seconds: 5));
 
+      debugPrint("🔍 Checking Persistence for $dateStr...");
       final doc = await collection.findOne(mongo.where.eq('date', dateStr));
+
       if (doc != null) {
         final entry = MoodEntry.fromJson(doc);
         if (mounted) {
@@ -72,13 +78,31 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
             _energyLevel = entry.energy ?? 0.5;
             _stressLevel = entry.stress ?? 0.5;
             _socialLevel = entry.social ?? 0.5;
+            _lastLoadedDate = dateStr;
           });
           debugPrint("✅ Persistence: Restored today's values");
         }
+      } else {
+        debugPrint("ℹ️ No persistence found for today.");
       }
     } catch (e) {
-      debugPrint("ℹ️ No previous data for today or offline: $e");
+      debugPrint("ℹ️ Persistence check failed (Offline?): $e");
     }
+  }
+
+  Future<void> _loadCachedLocation() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final city = prefs.getString('cached_city');
+      final temp = prefs.getString('cached_temp');
+      if (city != null && mounted) {
+        setState(() {
+          _cityName = city;
+          if (temp != null) _temperature = temp;
+        });
+        debugPrint("📍 Loaded Cached Location: $city");
+      }
+    } catch (_) {}
   }
 
   @override
@@ -262,7 +286,17 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         final data = json.decode(response.body);
         final temp = data['current']['temperature_2m'];
         final unit = data['current_units']['temperature_2m'] ?? "°C";
-        setState(() => _temperature = "${temp.round()}$unit");
+
+        if (mounted) {
+          setState(() => _temperature = "${temp.round()}$unit");
+        }
+
+        // Cache It
+        final prefs = await SharedPreferences.getInstance();
+        if (_cityName.isNotEmpty) {
+          await prefs.setString('cached_city', _cityName);
+        }
+        await prefs.setString('cached_temp', _temperature);
       }
     } catch (e) {
       debugPrint("Weather Error: $e");
@@ -375,8 +409,16 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(_formatSleep(value),
-                    style: AppTheme.headerLarge.copyWith(fontSize: 48)),
+                InkWell(
+                  onTap: () => _pickSleepTimeManual(),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    child: Text(_formatSleep(value),
+                        style: AppTheme.headerLarge.copyWith(fontSize: 48)),
+                  ),
+                ),
                 Text("SLEEP DURATION", style: AppTheme.labelSmall),
               ],
             ),
@@ -391,6 +433,43 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         ),
       ),
     ).animate().fadeIn().scale();
+  }
+
+  Future<void> _pickSleepTimeManual() async {
+    // Show a simple time picker-like dialog or just a text input for hours
+    // Simplified: Circular slider is intuitive, but precise editing can be done via TimePicker
+    // We treat "Hours" and "Minutes" as the input.
+
+    TimeOfDay? picked = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay(
+            hour: _sleepHours.floor(),
+            minute: ((_sleepHours - _sleepHours.floor()) * 60).round()),
+        builder: (context, child) {
+          return MediaQuery(
+            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+            child: Theme(
+                data: ThemeData.dark().copyWith(
+                    colorScheme: ColorScheme.dark(
+                  primary: AppTheme.neonPurple,
+                  onPrimary: Colors.white,
+                  surface: const Color(0xFF1E1E1E),
+                  onSurface: Colors.white,
+                )),
+                child: child!),
+          );
+        });
+
+    if (picked != null) {
+      double newHours = picked.hour + (picked.minute / 60.0);
+      if (newHours > 12) {
+        // Warning if > 12h? Or just clamp?
+        // Let's allow it but the slider might look weird if > max.
+        // Our slider max is 12. Let's clamp to 12 for UI consistency or assume user knows.
+        if (newHours > 12) newHours = 12;
+      }
+      setState(() => _sleepHours = newHours);
+    }
   }
 
   Widget _buildMetrics() {

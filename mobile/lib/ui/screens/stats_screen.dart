@@ -3,6 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
 
 import '../../models/mood_entry.dart';
@@ -335,20 +336,83 @@ class _StatsScreenState extends State<StatsScreen> {
   Widget _buildBarChart() {
     return GlassCard(
       child: SizedBox(
-        height: 180,
-        child: BarChart(
-          BarChartData(
-            gridData: const FlGridData(show: false),
-            titlesData: const FlTitlesData(show: false),
-            borderData: FlBorderData(show: false),
-            barGroups: _buildBarGroups(),
-            barTouchData: BarTouchData(
-                touchTooltipData: BarTouchTooltipData(
-                    tooltipBgColor: Colors.black87,
-                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                      return BarTooltipItem("${rod.toY.round()}h",
-                          const TextStyle(color: Colors.white));
-                    })),
+        child: SizedBox(
+          height: 200, // Increased height for X-axis labels
+          child: BarChart(
+            BarChartData(
+              gridData: const FlGridData(show: false),
+              titlesData: FlTitlesData(
+                show: true,
+                leftTitles:
+                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                topTitles:
+                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                rightTitles:
+                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    getTitlesWidget: (val, meta) {
+                      if (val.toInt() < 0 ||
+                          val.toInt() >= _recentEntries.length)
+                        return const SizedBox.shrink();
+                      final entry = _recentEntries[val.toInt()];
+                      try {
+                        final date = DateTime.parse(entry.date);
+                        final dayName = DateFormat('E')
+                            .format(date)
+                            .toUpperCase(); // MON, TUE
+                        final dayNum = DateFormat('d').format(date); // 12
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(dayName,
+                                  style: TextStyle(
+                                      color: Colors.white54,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold)),
+                              Text(dayNum,
+                                  style: TextStyle(
+                                      color: Colors.white30, fontSize: 10)),
+                            ],
+                          ),
+                        );
+                      } catch (_) {
+                        return const SizedBox.shrink();
+                      }
+                    },
+                  ),
+                ),
+              ),
+              borderData: FlBorderData(show: false),
+              barGroups: _buildBarGroups(),
+              barTouchData: BarTouchData(
+                  touchTooltipData: BarTouchTooltipData(
+                      tooltipBgColor: AppTheme.neonPurple,
+                      tooltipPadding: const EdgeInsets.all(8),
+                      tooltipMargin: 8,
+                      fitInsideHorizontally: true, // Fix Overflow
+                      fitInsideVertically: true, // Fix Overflow
+                      getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                        final dateStr = _recentEntries[groupIndex].date;
+                        return BarTooltipItem(
+                            "${rod.toY.round()}h\n",
+                            const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14),
+                            children: [
+                              TextSpan(
+                                  text: dateStr,
+                                  style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontWeight: FontWeight.normal,
+                                      fontSize: 10))
+                            ]);
+                      })),
+            ),
           ),
         ),
       ),
