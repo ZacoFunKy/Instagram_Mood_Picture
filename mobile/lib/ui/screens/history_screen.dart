@@ -197,14 +197,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
     try {
       final date = DateTime.parse(entry.date);
       String dayStr = DateFormat('EEEE d MMMM').format(date).toUpperCase();
-      
+
       // Determine Time of Day
-      String timeOfDay = "JOURNÉE";
+      String timeOfDay = "MATIN";
       int hour = entry.lastUpdated.hour;
-      else if (hour < 18)
+
+      if (hour < 12) {
+        timeOfDay = "MATIN";
+      } else if (hour < 18) {
         timeOfDay = "APRÈS-MIDI";
-      else
+      } else {
         timeOfDay = "SOIR";
+      }
 
       return "$dayStr • $timeOfDay";
     } catch (_) {
