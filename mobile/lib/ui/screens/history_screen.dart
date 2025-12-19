@@ -173,7 +173,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
               children: [
                 Row(
                   children: [
-                    Text("$dayName • $timeOfDay",
+                    Text(
+                        // Hide time if null/empty
+                        timeOfDay != null ? "$dayName • $timeOfDay" : dayName,
                         style: AppTheme.subText
                             .copyWith(fontSize: 10, letterSpacing: 0.5)),
                     if (isSynced) ...[
@@ -230,7 +232,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  String _formatTimeOfDay(DateTime date) {
+  String? _formatTimeOfDay(DateTime? date) {
+    if (date == null) return null;
     date = date.toLocal();
     int hour = date.hour;
     if (hour < 5) return "NUIT";

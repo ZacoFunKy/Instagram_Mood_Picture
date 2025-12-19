@@ -57,16 +57,27 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   }
 
   /// Check if we already have data for today in the database
-  Future<void> _checkTodayData() async {
+  Future<void> _checkTodayData({bool retry = true}) async {
     try {
       final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
       if (_lastLoadedDate == dateStr) return; // Prevent double loads
 
-      // Short timeout for UI initialization
-      final collection = await DatabaseService.instance.overrides
-          .timeout(const Duration(seconds: 5));
-
+      // Increased timeout + Retry Logic
       debugPrint("🔍 Checking Persistence for $dateStr...");
+
+      mongo.DbCollection? collection;
+      try {
+        collection = await DatabaseService.instance.overrides
+            .timeout(const Duration(seconds: 10)); // Increased limit
+      } catch (e) {
+        if (retry) {
+          debugPrint("⚠️ DB not ready, retrying persistence check in 2s...");
+          await Future.delayed(const Duration(seconds: 2));
+          return _checkTodayData(retry: false);
+        }
+        rethrow;
+      }
+
       final doc = await collection.findOne(mongo.where.eq('date', dateStr));
 
       if (doc != null) {

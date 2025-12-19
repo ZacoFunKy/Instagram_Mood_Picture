@@ -6,7 +6,7 @@ class MoodEntry {
   final double? social;
   final int steps;
   final String? location;
-  final DateTime lastUpdated;
+  final DateTime? lastUpdated; // Nullable to avoid false "Now"
   final String device;
   final String? moodSelected; // For reading back predicted data
 
@@ -18,7 +18,7 @@ class MoodEntry {
     this.social,
     required this.steps,
     this.location,
-    required this.lastUpdated,
+    this.lastUpdated,
     required this.device,
     this.moodSelected,
   });
@@ -33,12 +33,12 @@ class MoodEntry {
       social: (json['feedback_social'] as num?)?.toDouble(), // Nullable
       steps: (json['steps_count'] as num?)?.toInt() ?? 0,
       location: json['location'] as String?,
+      // Prioritize created_at, then last_updated, then NULL (no default Now)
       lastUpdated: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'] as String) ?? DateTime.now()
+          ? DateTime.tryParse(json['created_at'] as String)
           : (json['last_updated'] != null
-              ? DateTime.tryParse(json['last_updated'] as String) ??
-                  DateTime.now()
-              : DateTime.now()),
+              ? DateTime.tryParse(json['last_updated'] as String)
+              : null),
       device: json['device'] as String? ?? 'unknown',
       moodSelected: json['mood_selected'] as String?,
     );
@@ -54,7 +54,7 @@ class MoodEntry {
       "feedback_social": social,
       "steps_count": steps,
       "location": location,
-      "last_updated": lastUpdated.toIso8601String(),
+      "last_updated": lastUpdated?.toIso8601String(),
       "device": device,
     };
   }
@@ -65,7 +65,7 @@ class MoodEntry {
       date: "",
       sleepHours: 7.0,
       steps: 0,
-      lastUpdated: DateTime.now(),
+      lastUpdated: DateTime.now(), // Default to now only for fresh empty init
       device: "unknown",
     );
   }
