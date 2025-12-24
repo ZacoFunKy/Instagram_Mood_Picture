@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import '../utils/app_theme.dart';
 
 class NeonBtn extends StatelessWidget {
   final VoidCallback onTap;
@@ -22,12 +24,23 @@ class NeonBtn extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(30),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              color.withOpacity(0.35),
+              color.withOpacity(0.15),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: color.withOpacity(0.6),
+            width: 1.5,
+          ),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.5),
-              blurRadius: 20,
+              color: color.withOpacity(0.4),
+              blurRadius: 24,
               spreadRadius: 2,
               offset: const Offset(0, 4),
             ),
@@ -40,14 +53,23 @@ class NeonBtn extends StatelessWidget {
                   height: 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
                 )
               : Text(
                   text,
                   style: GoogleFonts.inter(
                     fontWeight: FontWeight.bold,
-                    color: Colors.black,
+                    color: Colors.white,
+                    fontSize: 16,
+                    letterSpacing: 1,
+                  ),
+                ),
+        ),
+      ).animate().fadeIn().scale(),
+    );
+  }
+}
                     letterSpacing: 1.5,
                   ),
                 ),

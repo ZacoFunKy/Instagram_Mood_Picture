@@ -268,28 +268,86 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   Widget _buildInfoCard(String label, String value, Color accent) {
-    return GlassCard(
+    return Container(
       padding: const EdgeInsets.all(20),
-      borderRadius: BorderRadius.circular(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.08),
+            Colors.white.withOpacity(0.03),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: accent.withOpacity(0.3),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withOpacity(0.1),
+            blurRadius: 16,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              CircleAvatar(backgroundColor: accent, radius: 4),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: accent,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: accent.withOpacity(0.6),
+                      blurRadius: 8,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(width: 8),
               Text(label, style: AppTheme.labelSmall),
             ],
           ),
           const SizedBox(height: 12),
-          Text(value, style: AppTheme.valueLarge),
+          Text(value, style: AppTheme.valueLarge.copyWith(color: accent)),
         ],
       ),
-    );
+    ).animate().fadeIn().slideY(begin: 0.1, end: 0);
   }
 
   Widget _buildPieChart() {
-    return GlassCard(
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.08),
+            Colors.white.withOpacity(0.03),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.15),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.white.withOpacity(0.05),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
       child: SizedBox(
         height: 200,
         child: PieChart(
@@ -300,7 +358,7 @@ class _StatsScreenState extends State<StatsScreen> {
           ),
         ),
       ),
-    );
+    ).animate().fadeIn().slideY(begin: 0.1, end: 0);
   }
 
   List<PieChartSectionData> _buildPieSections() {
@@ -334,89 +392,110 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   Widget _buildBarChart() {
-    return GlassCard(
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.08),
+            Colors.white.withOpacity(0.03),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.15),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.white.withOpacity(0.05),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
       child: SizedBox(
-        child: SizedBox(
-          height: 200, // Increased height for X-axis labels
-          child: BarChart(
-            BarChartData(
-              gridData: const FlGridData(show: false),
-              titlesData: FlTitlesData(
-                show: true,
-                leftTitles:
-                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                topTitles:
-                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles:
-                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    getTitlesWidget: (val, meta) {
-                      if (val.toInt() < 0 ||
-                          val.toInt() >= _recentEntries.length)
-                        return const SizedBox.shrink();
-                      final entry = _recentEntries[val.toInt()];
-                      try {
-                        final date = DateTime.parse(entry.date);
-                        final dayName = DateFormat('E')
-                            .format(date)
-                            .toUpperCase(); // MON, TUE
-                        final dayNum = DateFormat('d').format(date); // 12
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 8.0),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(dayName,
-                                  style: TextStyle(
-                                      color: Colors.white54,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold)),
-                              Text(dayNum,
-                                  style: TextStyle(
-                                      color: Colors.white30, fontSize: 10)),
-                            ],
-                          ),
-                        );
-                      } catch (_) {
-                        return const SizedBox.shrink();
-                      }
-                    },
-                  ),
+        height: 200,
+        child: BarChart(
+          BarChartData(
+            gridData: const FlGridData(show: false),
+            titlesData: FlTitlesData(
+              show: true,
+              leftTitles:
+                  const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              topTitles:
+                  const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              rightTitles:
+                  const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  getTitlesWidget: (val, meta) {
+                    if (val.toInt() < 0 ||
+                        val.toInt() >= _recentEntries.length)
+                      return const SizedBox.shrink();
+                    final entry = _recentEntries[val.toInt()];
+                    try {
+                      final date = DateTime.parse(entry.date);
+                      final dayName = DateFormat('E')
+                          .format(date)
+                          .toUpperCase(); // MON, TUE
+                      final dayNum = DateFormat('d').format(date); // 12
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(dayName,
+                                style: TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold)),
+                            Text(dayNum,
+                                style: TextStyle(
+                                    color: Colors.white30, fontSize: 10)),
+                          ],
+                        ),
+                      );
+                    } catch (_) {
+                      return const SizedBox.shrink();
+                    }
+                  },
                 ),
               ),
-              borderData: FlBorderData(show: false),
-              barGroups: _buildBarGroups(),
-              barTouchData: BarTouchData(
-                  touchTooltipData: BarTouchTooltipData(
-                      tooltipBgColor: AppTheme.neonPurple,
-                      tooltipPadding: const EdgeInsets.all(8),
-                      tooltipMargin: 8,
-                      fitInsideHorizontally: true, // Fix Overflow
-                      fitInsideVertically: true, // Fix Overflow
-                      getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                        final dateStr = _recentEntries[groupIndex].date;
-                        return BarTooltipItem(
-                            "${rod.toY.round()}h\n",
-                            const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14),
-                            children: [
-                              TextSpan(
-                                  text: dateStr,
-                                  style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontWeight: FontWeight.normal,
-                                      fontSize: 10))
-                            ]);
-                      })),
             ),
+            borderData: FlBorderData(show: false),
+            barGroups: _buildBarGroups(),
+            barTouchData: BarTouchData(
+                touchTooltipData: BarTouchTooltipData(
+                    tooltipBgColor: AppTheme.neonPurple,
+                    tooltipPadding: const EdgeInsets.all(8),
+                    tooltipMargin: 8,
+                    fitInsideHorizontally: true, // Fix Overflow
+                    fitInsideVertically: true, // Fix Overflow
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      final dateStr = _recentEntries[groupIndex].date;
+                      return BarTooltipItem(
+                          "${rod.toY.round()}h\n",
+                          const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14),
+                          children: [
+                            TextSpan(
+                                text: dateStr,
+                                style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontWeight: FontWeight.normal,
+                                    fontSize: 10))
+                          ]);
+                    })),
           ),
         ),
       ),
-    );
+    ).animate().fadeIn().slideY(begin: 0.1, end: 0);
   }
 
   List<BarChartGroupData> _buildBarGroups() {

@@ -632,19 +632,44 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     bool goalMet = _currentSteps >= 10000;
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white10),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.08),
+            Colors.white.withOpacity(0.03),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: goalMet ? AppTheme.neonGreen.withOpacity(0.4) : Colors.white.withOpacity(0.15),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: goalMet ? AppTheme.neonGreen.withOpacity(0.15) : Colors.transparent,
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
-              const Text("👟", style: TextStyle(fontSize: 20)),
-              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonGreen.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppTheme.neonGreen.withOpacity(0.4)),
+                ),
+                child: const Text("👟", style: TextStyle(fontSize: 24)),
+              ),
+              const SizedBox(width: 16),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -659,19 +684,26 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
             ],
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: goalMet ? AppTheme.neonGreen : Colors.white10,
+              gradient: LinearGradient(
+                colors: goalMet
+                    ? [AppTheme.neonGreen.withOpacity(0.3), AppTheme.neonGreen.withOpacity(0.1)]
+                    : [Colors.white.withOpacity(0.1), Colors.white.withOpacity(0.05)],
+              ),
               borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: goalMet ? AppTheme.neonGreen.withOpacity(0.5) : Colors.white.withOpacity(0.2),
+              ),
             ),
             child: Text(
               goalMet
-                  ? "GOAL"
+                  ? "✓ GOAL"
                   : "${(((_currentSteps / 10000) * 100).toInt())}%",
               style: GoogleFonts.inter(
-                fontSize: 10,
+                fontSize: 12,
                 fontWeight: FontWeight.bold,
-                color: goalMet ? Colors.black : Colors.white54,
+                color: goalMet ? AppTheme.neonGreen : Colors.white70,
               ),
             ),
           ),
