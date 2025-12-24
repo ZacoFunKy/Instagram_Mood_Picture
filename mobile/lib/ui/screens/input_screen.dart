@@ -15,11 +15,10 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../models/mood_entry.dart';
 import '../../services/database_service.dart';
 import '../../services/pedometer_service.dart';
-import '../services/google_calendar_service.dart';
-import '../services/ics_service.dart';
-import '../services/youtube_music_service.dart';
-import '../services/youtube_music_cloud_service.dart';
-import '../utils/app_logger.dart';
+import '../../services/youtube_music_service.dart';
+import '../../services/ics_service.dart';
+import '../../services/youtube_music_cloud_service.dart';
+import '../../utils/app_logger.dart';
 import '../../services/spotify_enrichment_service.dart';
 import '../../services/google_calendar_service.dart';
 import '../../services/sleep_tracking_service.dart';
@@ -141,7 +140,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
 
         if (mounted) {
           setState(() {
-            _todayEvents = allEvents;
+            _todayEvents = List<Map<String, dynamic>>.from(allEvents);
             // If we have ICS events, we are "Connected" in terms of data availability
             if (icsEvents.isNotEmpty) {
               _isCalendarConnected = true;
