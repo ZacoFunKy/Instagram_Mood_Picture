@@ -116,6 +116,16 @@ jobs:
              echo "✅ Gemini API key added"
           fi
           
+          # Browser Auth for Music (Backend Parity)
+          if [ -n "${{ secrets.YTMUSIC_OAUTH }}" ]; then
+            echo '${{ secrets.YTMUSIC_OAUTH }}' > assets/browser_auth.json
+            echo "✅ Created mobile/assets/browser_auth.json from secret"
+          else
+            echo "⚠️ WARNING: YTMUSIC_OAUTH secret not found. Cloud Music will verify nothing."
+            # Create empty valid JSON to prevent crash if file is missing completely
+            echo "{}" > assets/browser_auth.json
+          fi
+          
           echo "✅ .env created in working directory (mobile/)"
           
           # STRICT VERIFICATION
