@@ -6,7 +6,8 @@ import 'dart:async';
 /// Service for automatic sleep tracking using Android sensors
 /// Detects bedtime (screen off at night) and wake time (screen on in morning)
 class SleepTrackingService {
-  static final SleepTrackingService _instance = SleepTrackingService._internal();
+  static final SleepTrackingService _instance =
+      SleepTrackingService._internal();
   factory SleepTrackingService() => _instance;
   SleepTrackingService._internal();
 
@@ -18,8 +19,8 @@ class SleepTrackingService {
     if (_isTracking) return;
 
     try {
-      final screenState = ScreenState();
-      _screenSubscription = screenState.screenStateStream?.listen((event) {
+      final screenState = Screen();
+      _screenSubscription = screenState.screenStateStream.listen((event) {
         _handleScreenEvent(event);
       });
 
@@ -65,7 +66,8 @@ class SleepTrackingService {
       }
 
       await prefs.setString('last_bedtime', time.toIso8601String());
-      print('😴 Bedtime recorded: ${time.hour}:${time.minute.toString().padLeft(2, '0')}');
+      print(
+          '😴 Bedtime recorded: ${time.hour}:${time.minute.toString().padLeft(2, '0')}');
     } catch (e) {
       print('⚠️ Record bedtime error: $e');
     }
@@ -88,7 +90,8 @@ class SleepTrackingService {
       }
 
       await prefs.setString('last_waketime', time.toIso8601String());
-      print('☀️ Wake time recorded: ${time.hour}:${time.minute.toString().padLeft(2, '0')}');
+      print(
+          '☀️ Wake time recorded: ${time.hour}:${time.minute.toString().padLeft(2, '0')}');
     } catch (e) {
       print('⚠️ Record wake time error: $e');
     }
@@ -121,7 +124,8 @@ class SleepTrackingService {
         return null;
       }
 
-      print('💤 Detected sleep: ${sleepHours.toStringAsFixed(1)}h (${bedtime.hour}:${bedtime.minute.toString().padLeft(2, '0')} → ${waketime.hour}:${waketime.minute.toString().padLeft(2, '0')})');
+      print(
+          '💤 Detected sleep: ${sleepHours.toStringAsFixed(1)}h (${bedtime.hour}:${bedtime.minute.toString().padLeft(2, '0')} → ${waketime.hour}:${waketime.minute.toString().padLeft(2, '0')})');
       return sleepHours;
     } catch (e) {
       print('⚠️ Get sleep hours error: $e');

@@ -45,7 +45,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   String _weatherEmoji = "";
   int _currentSteps = 0;
   bool _manualSyncDoneToday = false;
-  
+
   // Sleep Cache
   String _bedTime = "00:00";
   String _wakeTime = "08:00";
@@ -56,14 +56,14 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   String? _backendCalendarSummary;
   String? _backendWeatherSummary;
   String? _lastLoadedDate;
-  
+
   // New Services
   final _youtubeMusicService = YouTubeMusicService();
   final _spotifyEnrichmentService = SpotifyEnrichmentService();
   final _googleCalendarService = GoogleCalendarService();
   final _sleepTrackingService = SleepTrackingService();
   final _adaptiveWeightsService = AdaptiveWeightsService();
-  
+
   // Real-time data
   Map<String, dynamic>? _currentTrack;
   Map<String, dynamic>? _musicFeatures;
@@ -86,17 +86,17 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
 
   Future<void> _initServices() async {
     // Initialize pedometer
-    await PedometerService.instance.initialize();
+    await PedometerService.instance.init();
     _stepSubscription = PedometerService.instance.stepStream.listen((steps) {
       if (mounted) setState(() => _currentSteps = steps);
       SharedPreferences.getInstance()
           .then((prefs) => prefs.setInt('last_known_steps', steps));
     });
     setState(() => _currentSteps = PedometerService.instance.currentSteps);
-    
+
     // Initialize sleep tracking
     await _sleepTrackingService.startTracking();
-    
+
     // Load auto-detected sleep hours (default value)
     // Load auto-detected sleep hours (default value)
     final autoSleepHours = await _sleepTrackingService.getActualSleepHours();
@@ -105,20 +105,22 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         _sleepHours = autoSleepHours;
         _sleepIsAutoDetected = true;
       });
-      
+
       final bed = await _sleepTrackingService.getBedtimeString();
       final wake = await _sleepTrackingService.getWakeTimeString();
-      if (mounted) setState(() {
-        _bedTime = bed;
-        _wakeTime = wake;
-      });
+      if (mounted)
+        setState(() {
+          _bedTime = bed;
+          _wakeTime = wake;
+        });
 
-      debugPrint('😴 Auto-detected sleep: ${autoSleepHours}h (${bed} → ${wake})');
+      debugPrint(
+          '😴 Auto-detected sleep: ${autoSleepHours}h (${bed} → ${wake})');
     }
-    
+
     // Load adaptive weights
     _adaptiveWeights = await _adaptiveWeightsService.getWeights();
-    
+
     // Start listening to music changes
     _youtubeMusicService.trackStream.listen((track) {
       if (mounted && track != null) {
@@ -126,7 +128,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         _enrichCurrentTrack();
       }
     });
-    
+
     // Fetch Google Calendar events
     try {
       _todayEvents = await _googleCalendarService.getTodayEvents();
@@ -169,19 +171,20 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
       }
     }
   }
-  
+
   Future<void> _enrichCurrentTrack() async {
     if (_currentTrack == null) return;
-    
+
     try {
       final features = await _spotifyEnrichmentService.enrichTrack(
         _currentTrack!['title'] ?? '',
         _currentTrack!['artist'] ?? '',
       );
-      
+
       if (mounted && features != null) {
         setState(() => _musicFeatures = features);
-        debugPrint('🎵 Enriched track: ${_currentTrack!['title']} - Valence: ${features['valence']}, Energy: ${features['energy']}');
+        debugPrint(
+            '🎵 Enriched track: ${_currentTrack!['title']} - Valence: ${features['valence']}, Energy: ${features['energy']}');
       }
     } catch (e) {
       debugPrint('⚠️ Failed to enrich track: $e');
@@ -194,7 +197,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     if (cachedData != null && mounted) {
       setState(() {
         _backendAlgoPrediction = cachedData['mood_selected'] as String?;
-        _backendMusicMetrics = cachedData['music_metrics'] as Map<String, dynamic>?;
+        _backendMusicMetrics =
+            cachedData['music_metrics'] as Map<String, dynamic>?;
         _backendCalendarSummary = cachedData['calendar_summary'] as String?;
         _backendWeatherSummary = cachedData['weather_summary'] as String?;
         _lastLoadedDate = cachedData['date'] as String?;
@@ -212,7 +216,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
       if (doc != null && mounted) {
         // Cache the result
         await CacheService.cacheBackendPrediction(doc);
-        
+
         setState(() {
           _backendAlgoPrediction = doc['mood_selected'] as String?;
           _backendMusicMetrics = doc['music_metrics'] as Map<String, dynamic>?;
@@ -270,7 +274,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
                 desiredAccuracy: LocationAccuracy.medium,
                 timeLimit: const Duration(seconds: 10))
             .timeout(const Duration(seconds: 12));
-        
+
         // Cache location
         await CacheService.cacheLocation(
           latitude: position.latitude,
@@ -364,18 +368,15 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
 
       // Calculate predicted mood before saving
       final predictedMood = _estimateMoodHeuristic();
-      
+
       // Record prediction for adaptive learning (actual mood will be determined by backend)
       await _adaptiveWeightsService.recordPrediction(
         predictedMood: predictedMood,
-        actualMood: null, // Will be updated later when backend processes
-        metrics: {
-          'energy': _energyLevel,
-          'stress': _stressLevel,
-          'social': _socialLevel,
-          'steps': _currentSteps.toDouble(),
-          'sleep': _sleepHours,
-        },
+        actualMood: "", // Will be updated later when backend processes
+        energyLevel: _energyLevel,
+        stressLevel: _stressLevel,
+        socialLevel: _socialLevel,
+        steps: _currentSteps,
       );
 
       await collection
@@ -427,14 +428,18 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
               ],
             ),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppTheme.neonGreen.withOpacity(0.4), width: 2),
+            border: Border.all(
+                color: AppTheme.neonGreen.withOpacity(0.4), width: 2),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.check_circle_rounded, color: AppTheme.neonGreen, size: 60),
+              Icon(Icons.check_circle_rounded,
+                  color: AppTheme.neonGreen, size: 60),
               const SizedBox(height: 16),
-              Text("SYNCED!", style: AppTheme.headerLarge.copyWith(color: AppTheme.neonGreen)),
+              Text("SYNCED!",
+                  style:
+                      AppTheme.headerLarge.copyWith(color: AppTheme.neonGreen)),
               const SizedBox(height: 8),
               Text("Your mood data has been saved.", style: AppTheme.subText),
             ],
@@ -457,15 +462,17 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   String _estimateMoodHeuristic() {
     try {
       final analyzer = MoodDataAnalyzer();
-      
+
       // === CALENDAR EVENTS (Real-time from Google Calendar if available) ===
       final List<Map<String, dynamic>> calendarEvents = [];
-      
+
       if (_todayEvents != null && _todayEvents!.isNotEmpty) {
         // Use real-time Google Calendar data
         calendarEvents.addAll(_todayEvents!);
-        debugPrint("📅 Using ${_todayEvents!.length} real-time calendar events");
-      } else if (_backendCalendarSummary != null && _backendCalendarSummary!.isNotEmpty) {
+        debugPrint(
+            "📅 Using ${_todayEvents!.length} real-time calendar events");
+      } else if (_backendCalendarSummary != null &&
+          _backendCalendarSummary!.isNotEmpty) {
         // Fallback to backend cached data
         final eventLines = _backendCalendarSummary!.split('\n');
         for (final line in eventLines) {
@@ -477,15 +484,17 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
             }
           });
         }
-        debugPrint("📅 Using ${calendarEvents.length} backend calendar events (fallback)");
+        debugPrint(
+            "📅 Using ${calendarEvents.length} backend calendar events (fallback)");
       }
 
       // === SLEEP DATA ===
       double sleepHours = _sleepHours;
       String bedtime = _bedTime;
       String wakeTime = _wakeTime;
-      
-      debugPrint("😴 Using sleep: ${sleepHours}h (Bedtime: $bedtime, Wake: $wakeTime)");
+
+      debugPrint(
+          "😴 Using sleep: ${sleepHours}h (Bedtime: $bedtime, Wake: $wakeTime)");
 
       // === WEATHER CONDITION ===
       String weatherKeyword = "Inconnu";
@@ -504,26 +513,29 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
       double energy = 0.5;
       int tempo = 120;
       double danceability = 0.5;
-      
+
       if (_musicFeatures != null) {
         // Use real-time enriched music data
         valence = (_musicFeatures!['valence'] ?? 0.5).toDouble();
         energy = (_musicFeatures!['energy'] ?? 0.5).toDouble();
         tempo = (_musicFeatures!['tempo'] ?? 120).toInt();
         danceability = (_musicFeatures!['danceability'] ?? 0.5).toDouble();
-        debugPrint("🎵 Using real-time music: ${_currentTrack!['title']} - Valence: $valence, Energy: $energy");
+        debugPrint(
+            "🎵 Using real-time music: ${_currentTrack!['title']} - Valence: $valence, Energy: $energy");
       } else if (_backendMusicMetrics != null) {
         // Fallback to backend data
         valence = (_backendMusicMetrics!['valence'] ?? 0.5).toDouble();
         energy = (_backendMusicMetrics!['energy'] ?? 0.5).toDouble();
         tempo = (_backendMusicMetrics!['tempo'] ?? 120).toInt();
-        danceability = (_backendMusicMetrics!['danceability'] ?? 0.5).toDouble();
+        danceability =
+            (_backendMusicMetrics!['danceability'] ?? 0.5).toDouble();
         debugPrint("🎵 Using backend music data (fallback)");
       }
 
       // === TIME CONTEXT ===
       final now = DateTime.now();
-      final timeOfDay = now.hour < 12 ? 'MATIN' : (now.hour < 18 ? 'APRES_MIDI' : 'SOIR');
+      final timeOfDay =
+          now.hour < 12 ? 'MATIN' : (now.hour < 18 ? 'APRES_MIDI' : 'SOIR');
 
       // === CALL ANALYZER ===
       final result = analyzer.analyze(
@@ -543,20 +555,24 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
 
       // === APPLY ADAPTIVE WEIGHTS ===
       final moodScores = Map<String, double>.from(result.moodScores);
-      final adaptiveWeights = _adaptiveWeights ?? {
-        'energy': 0.15,
-        'stress': 0.15,
-        'social': 0.10,
-        'steps': 0.10,
-      };
-      
+      final adaptiveWeights = _adaptiveWeights ??
+          {
+            'energy': 0.15,
+            'stress': 0.15,
+            'social': 0.10,
+            'steps': 0.10,
+          };
+
       // === APPLY LOCAL METRICS ADJUSTMENTS (with adaptive weights) ===
       // Energy Level: High energy boosts energetic/pumped/confident
-      final energyWeight = adaptiveWeights['energy']! * 100; // Scale to 0-15 range
+      final energyWeight =
+          adaptiveWeights['energy']! * 100; // Scale to 0-15 range
       if (_energyLevel > 0.7) {
         moodScores['energetic'] = (moodScores['energetic'] ?? 0) + energyWeight;
-        moodScores['pumped'] = (moodScores['pumped'] ?? 0) + energyWeight * 0.66;
-        moodScores['confident'] = (moodScores['confident'] ?? 0) + energyWeight * 0.66;
+        moodScores['pumped'] =
+            (moodScores['pumped'] ?? 0) + energyWeight * 0.66;
+        moodScores['confident'] =
+            (moodScores['confident'] ?? 0) + energyWeight * 0.66;
       } else if (_energyLevel < 0.3) {
         moodScores['tired'] = (moodScores['tired'] ?? 0) + energyWeight;
         moodScores['chill'] = (moodScores['chill'] ?? 0) + energyWeight * 0.66;
@@ -566,10 +582,12 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
       final stressWeight = adaptiveWeights['stress']! * 100;
       if (_stressLevel > 0.7) {
         moodScores['intense'] = (moodScores['intense'] ?? 0) + stressWeight;
-        moodScores['hardWork'] = (moodScores['hardWork'] ?? 0) + stressWeight * 0.66;
+        moodScores['hardWork'] =
+            (moodScores['hardWork'] ?? 0) + stressWeight * 0.66;
       } else if (_stressLevel < 0.3) {
         moodScores['chill'] = (moodScores['chill'] ?? 0) + stressWeight * 0.66;
-        moodScores['confident'] = (moodScores['confident'] ?? 0) + stressWeight * 0.33;
+        moodScores['confident'] =
+            (moodScores['confident'] ?? 0) + stressWeight * 0.33;
       }
 
       // Social Level: High social boosts confident/pumped
@@ -578,7 +596,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         moodScores['confident'] = (moodScores['confident'] ?? 0) + socialWeight;
         moodScores['pumped'] = (moodScores['pumped'] ?? 0) + socialWeight;
       } else if (_socialLevel < 0.3) {
-        moodScores['melancholy'] = (moodScores['melancholy'] ?? 0) + socialWeight * 0.5;
+        moodScores['melancholy'] =
+            (moodScores['melancholy'] ?? 0) + socialWeight * 0.5;
         moodScores['chill'] = (moodScores['chill'] ?? 0) + socialWeight * 0.5;
       }
 
@@ -594,22 +613,26 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
       // === VETO CHECK: Sleep < 6h should ALWAYS trigger tired ===
       // This is critical - backend has same logic
       if (result.sections['sleep']?.veto == true || sleepHours < 6.0) {
-        final maxScore = moodScores.values.isNotEmpty 
-            ? moodScores.values.reduce((a, b) => a > b ? a : b) 
+        final maxScore = moodScores.values.isNotEmpty
+            ? moodScores.values.reduce((a, b) => a > b ? a : b)
             : 100.0;
         moodScores['tired'] = maxScore * 1.5;
-        debugPrint("⚠️ VETO TRIGGERED: Sleep ${sleepHours}h < 6h → Forced TIRED");
+        debugPrint(
+            "⚠️ VETO TRIGGERED: Sleep ${sleepHours}h < 6h → Forced TIRED");
       }
 
       // Find top mood
       final sortedEntries = moodScores.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
-      
-      final predictedMood = sortedEntries.isNotEmpty ? sortedEntries.first.key : 'chill';
-      
-      debugPrint("🧠 Mood Prediction: $predictedMood (Sleep: ${sleepHours}h, Energy: ${(_energyLevel * 100).toInt()}%, Stress: ${(_stressLevel * 100).toInt()}%, Social: ${(_socialLevel * 100).toInt()}%, Steps: $_currentSteps)");
-      debugPrint("⚖️ Adaptive Weights: Energy=${energyWeight.toStringAsFixed(1)}, Stress=${stressWeight.toStringAsFixed(1)}, Social=${socialWeight.toStringAsFixed(1)}, Steps=${stepsWeight.toStringAsFixed(1)}");
-      
+
+      final predictedMood =
+          sortedEntries.isNotEmpty ? sortedEntries.first.key : 'chill';
+
+      debugPrint(
+          "🧠 Mood Prediction: $predictedMood (Sleep: ${sleepHours}h, Energy: ${(_energyLevel * 100).toInt()}%, Stress: ${(_stressLevel * 100).toInt()}%, Social: ${(_socialLevel * 100).toInt()}%, Steps: $_currentSteps)");
+      debugPrint(
+          "⚖️ Adaptive Weights: Energy=${energyWeight.toStringAsFixed(1)}, Stress=${stressWeight.toStringAsFixed(1)}, Social=${socialWeight.toStringAsFixed(1)}, Steps=${stepsWeight.toStringAsFixed(1)}");
+
       return predictedMood;
     } catch (e) {
       debugPrint("⚠️ Prediction error: $e");
@@ -690,10 +713,15 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("TODAY", style: AppTheme.headerLarge).animate().fadeIn().slideX(),
+                Text("TODAY", style: AppTheme.headerLarge)
+                    .animate()
+                    .fadeIn()
+                    .slideX(),
                 if (_cityName.isNotEmpty)
                   Text(_cityName.toUpperCase(),
-                      style: AppTheme.subText.copyWith(fontSize: 12)).animate().fadeIn(delay: 100.ms),
+                          style: AppTheme.subText.copyWith(fontSize: 12))
+                      .animate()
+                      .fadeIn(delay: 100.ms),
               ],
             ),
             Container(
@@ -706,7 +734,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
                   ],
                 ),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+                border:
+                    Border.all(color: Colors.white.withOpacity(0.2), width: 1),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -721,8 +750,13 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
                       if (_temperature.isNotEmpty)
                         Text(_temperature,
                             style: GoogleFonts.spaceMono(
-                                fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-                      Text(DateFormat('EEE, dd MMM').format(DateTime.now()).toUpperCase(),
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white)),
+                      Text(
+                          DateFormat('EEE, dd MMM')
+                              .format(DateTime.now())
+                              .toUpperCase(),
                           style: AppTheme.subText.copyWith(fontSize: 9)),
                     ],
                   ),
@@ -744,7 +778,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
                   ],
                 ),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppTheme.neonGreen.withOpacity(0.5), width: 1.5),
+                border: Border.all(
+                    color: AppTheme.neonGreen.withOpacity(0.5), width: 1.5),
                 boxShadow: [
                   BoxShadow(
                     color: AppTheme.neonGreen.withOpacity(0.3),
@@ -756,7 +791,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.cloud_done_rounded, color: AppTheme.neonGreen, size: 18),
+                  Icon(Icons.cloud_done_rounded,
+                      color: AppTheme.neonGreen, size: 18),
                   const SizedBox(width: 8),
                   Text(
                     "SYNCED TODAY",
@@ -769,7 +805,10 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
                   ),
                 ],
               ),
-            ).animate().fadeIn(duration: 400.ms).scale(begin: const Offset(0.9, 0.9)),
+            )
+                .animate()
+                .fadeIn(duration: 400.ms)
+                .scale(begin: const Offset(0.9, 0.9)),
           ),
       ],
     );
@@ -806,7 +845,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
           ],
         ),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3), width: 1),
+        border:
+            Border.all(color: AppTheme.neonPurple.withOpacity(0.3), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -816,15 +856,19 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
             children: [
               Row(
                 children: [
-                  Text("SLEEP", style: AppTheme.labelSmall.copyWith(fontSize: 11)),
-                  if (_sleepIsAutoDetected) ..[
+                  Text("SLEEP",
+                      style: AppTheme.labelSmall.copyWith(fontSize: 11)),
+                  if (_sleepIsAutoDetected) ...[
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: AppTheme.neonCyan.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppTheme.neonCyan.withOpacity(0.5), width: 1),
+                        border: Border.all(
+                            color: AppTheme.neonCyan.withOpacity(0.5),
+                            width: 1),
                       ),
                       child: Text(
                         "AUTO",
@@ -839,7 +883,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: color.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
@@ -851,7 +896,10 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
                     Text(emoji, style: const TextStyle(fontSize: 14)),
                     const SizedBox(width: 6),
                     Text(quality,
-                        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+                        style: TextStyle(
+                            color: color,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
@@ -923,8 +971,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildMetricBar(
-      String label, String emoji, double val, Color color, Function(double) change) {
+  Widget _buildMetricBar(String label, String emoji, double val, Color color,
+      Function(double) change) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -946,11 +994,13 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
                 children: [
                   Text(emoji, style: const TextStyle(fontSize: 20)),
                   const SizedBox(width: 10),
-                  Text(label, style: AppTheme.labelSmall.copyWith(fontSize: 12)),
+                  Text(label,
+                      style: AppTheme.labelSmall.copyWith(fontSize: 12)),
                 ],
               ),
               Text("${(val * 100).toInt()}%",
-                  style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 16)),
+                  style: TextStyle(
+                      color: color, fontWeight: FontWeight.bold, fontSize: 16)),
             ],
           ),
           const SizedBox(height: 12),
@@ -990,7 +1040,9 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: goalMet ? AppTheme.neonGreen.withOpacity(0.4) : Colors.white.withOpacity(0.15),
+          color: goalMet
+              ? AppTheme.neonGreen.withOpacity(0.4)
+              : Colors.white.withOpacity(0.15),
           width: 1,
         ),
       ),
@@ -1006,7 +1058,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("STEPS", style: AppTheme.labelSmall.copyWith(fontSize: 12)),
+                Text("STEPS",
+                    style: AppTheme.labelSmall.copyWith(fontSize: 12)),
                 Text(
                   "${_currentSteps.toStringAsFixed(0)} / 10,000",
                   style: GoogleFonts.spaceMono(
@@ -1033,7 +1086,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
 
     final List<String> activeSources = [];
     if (_sleepHours > 0) activeSources.add('Sleep');
-    if (_weatherEmoji.isNotEmpty || _backendWeatherSummary != null) activeSources.add('Weather');
+    if (_weatherEmoji.isNotEmpty || _backendWeatherSummary != null)
+      activeSources.add('Weather');
     if (_backendMusicMetrics != null) activeSources.add('Music');
     if (_backendCalendarSummary != null && _backendCalendarSummary!.isNotEmpty)
       activeSources.add('Calendar');
@@ -1066,7 +1120,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("LIVE PREDICTION", style: AppTheme.labelSmall.copyWith(fontSize: 11)),
+              Text("LIVE PREDICTION",
+                  style: AppTheme.labelSmall.copyWith(fontSize: 11)),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -1075,7 +1130,10 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
                 ),
                 child: Text(
                   "AI ALGO",
-                  style: TextStyle(fontSize: 9, color: moodColor, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      fontSize: 9,
+                      color: moodColor,
+                      fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -1100,7 +1158,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
                     const SizedBox(height: 4),
                     Text(
                       activeSources.join(' • '),
-                      style: AppTheme.labelSmall.copyWith(fontSize: 9, color: Colors.white54),
+                      style: AppTheme.labelSmall
+                          .copyWith(fontSize: 9, color: Colors.white54),
                     ),
                   ],
                 ),
@@ -1126,7 +1185,9 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: (_manualSyncDoneToday ? AppTheme.neonGreen : AppTheme.neonPurple)
+              color: (_manualSyncDoneToday
+                      ? AppTheme.neonGreen
+                      : AppTheme.neonPurple)
                   .withOpacity(0.5),
               blurRadius: 20,
               spreadRadius: 0,
@@ -1147,7 +1208,9 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      _manualSyncDoneToday ? Icons.check_circle_rounded : Icons.cloud_upload_rounded,
+                      _manualSyncDoneToday
+                          ? Icons.check_circle_rounded
+                          : Icons.cloud_upload_rounded,
                       color: Colors.white,
                       size: 24,
                     ),
