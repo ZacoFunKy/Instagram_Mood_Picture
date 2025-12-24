@@ -39,8 +39,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   bool _syncSuccess = false;
   String _temperature = "";
   String _cityName = "";
-  bool _weatherLoading = false;
   String? _lastLoadedDate;
+  bool _manualSyncDoneToday = false;
 
   // Stream Subscription
   StreamSubscription<int>? _stepSubscription;
@@ -55,6 +55,32 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     _loadCachedInputs(); // Instant Load Inputs
     _fetchWeather(); // Background Refresh
     _checkTodayData(); // Check persistence
+    _checkManualSyncStatus(); // Check if manual sync done today
+  }
+
+  /// Check if manual sync was performed today
+  Future<void> _checkManualSyncStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastSyncStr = prefs.getString('last_manual_sync');
+      
+      if (lastSyncStr != null) {
+        final lastSync = DateTime.parse(lastSyncStr);
+        final today = DateTime.now();
+        
+        // Check if sync was today
+        if (lastSync.year == today.year && 
+            lastSync.month == today.month && 
+            lastSync.day == today.day) {
+          if (mounted) {
+            setState(() => _manualSyncDoneToday = true);
+          }
+          debugPrint("✅ Manual sync detected today at ${lastSync.hour}:${lastSync.minute.toString().padLeft(2, '0')}");
+        }
+      }
+    } catch (e) {
+      debugPrint("⚠️ Manual sync status check error: $e");
+    }
   }
 
   /// Check if we already have data for today in the database
@@ -79,7 +105,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         rethrow;
       }
 
-      final doc = await collection.findOne(mongo.where.eq('date', dateStr));
+      final doc = await collection.findOne(mongo.where.eq('date', dateStr))
+          .timeout(const Duration(seconds: 8));
 
       if (doc != null) {
         final entry = MoodEntry.fromJson(doc);
@@ -95,10 +122,12 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
 
           // Update cache with latest DB truth
           final prefs = await SharedPreferences.getInstance();
-          await prefs.setDouble('cached_sleep', _sleepHours);
-          await prefs.setDouble('cached_energy', _energyLevel);
-          await prefs.setDouble('cached_stress', _stressLevel);
-          await prefs.setDouble('cached_social', _socialLevel);
+          await Future.wait([
+            prefs.setDouble('cached_sleep', _sleepHours),
+            prefs.setDouble('cached_energy', _energyLevel),
+            prefs.setDouble('cached_stress', _stressLevel),
+            prefs.setDouble('cached_social', _socialLevel),
+          ]);
 
           debugPrint("✅ Persistence: Restored today's values");
         }
@@ -232,23 +261,20 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     }
 
     try {
-      // 1. Get DB Connection (target: mobile.overrides)
+      // 1. Get DB Connection (target: mobile.overrides) with timeout
       final collection = await DatabaseService.instance.overrides
-          .timeout(const Duration(seconds: 30));
+          .timeout(const Duration(seconds: 20));
 
-      // 2. Préparer les données avec une ville toujours fournie si possible
-      //    - priorité à la ville du jour
-      //    - sinon, fallback sur la dernière ville connue (même si la date ne correspond pas)
+      // 2. Prepare data with proper location handling
       final prefs = await SharedPreferences.getInstance();
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-      final cachedCityDate = prefs.getString('cached_city_date');
       final cachedCity = prefs.getString('cached_city');
       String? locationToUse;
 
-      if (_cityName.isNotEmpty && cachedCityDate == today) {
-        locationToUse = _cityName; // Ville fraîche du jour
+      if (_cityName.isNotEmpty) {
+        locationToUse = _cityName; // Use fresh city if available
       } else if (cachedCity != null && cachedCity.isNotEmpty) {
-        locationToUse = cachedCity; // Fallback : dernière ville connue
+        locationToUse = cachedCity; // Fallback to last known city
       }
 
       final entry = MoodEntry(
@@ -263,24 +289,27 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         device: "android_app_mood_v2",
       );
 
-      // 3. Upsert
+      // 3. Upsert with timeout optimization
       await collection
           .replaceOne(
             mongo.where.eq('date', entry.date),
             entry.toJson(),
             upsert: true,
           )
-          .timeout(const Duration(seconds: 30));
+          .timeout(const Duration(seconds: 25));
 
       debugPrint("✅ Synced: ${entry.toJson()}");
 
       if (!silent) {
-        // Cache locally for next startup
-        await prefs.setString('cached_date', today);
-        await prefs.setDouble('cached_sleep', _sleepHours);
-        await prefs.setDouble('cached_energy', _energyLevel);
-        await prefs.setDouble('cached_stress', _stressLevel);
-        await prefs.setDouble('cached_social', _socialLevel);
+        // Cache locally for next startup + track manual sync
+        await Future.wait([
+          prefs.setString('cached_date', today),
+          prefs.setDouble('cached_sleep', _sleepHours),
+          prefs.setDouble('cached_energy', _energyLevel),
+          prefs.setDouble('cached_stress', _stressLevel),
+          prefs.setDouble('cached_social', _socialLevel),
+          prefs.setString('last_manual_sync', DateTime.now().toIso8601String()),  // Track manual sync
+        ]);
 
         await HapticFeedback.heavyImpact();
         if (mounted) {
@@ -288,7 +317,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
             _syncSuccess = true;
             _isSyncing = false;
           });
-          _showSuccessDialog(); // New Pop-up
+          _showSuccessDialog();
 
           Future.delayed(const Duration(seconds: 2), () {
             if (mounted) setState(() => _syncSuccess = false);
@@ -345,68 +374,98 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
 
   Future<void> _fetchWeather() async {
     if (!mounted) return;
-    setState(() => _weatherLoading = true);
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      
+      // Check cache first - reuse weather for entire day
+      final cachedWeatherDate = prefs.getString('cached_weather_date');
+      if (cachedWeatherDate == today) {
+        final cachedTemp = prefs.getString('cached_temp');
+        final cachedCity = prefs.getString('cached_city');
+        if (cachedTemp != null && cachedCity != null) {
+          if (mounted) {
+            setState(() {
+              _temperature = cachedTemp;
+              _cityName = cachedCity;
+            });
+          }
+          debugPrint("✅ Using cached weather for $today");
+          return;
+        }
+      }
+
       // Permission
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          setState(() {
-            _cityName = ""; // Ne pas réutiliser une vieille ville
+          if (mounted) setState(() {
+            _cityName = "";
             _temperature = "-";
-            _weatherLoading = false;
           });
           return;
         }
       }
 
-      // Position
-      Position position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.low);
+      // Get position with timeout
+      Position position;
+      try {
+        position = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.medium,
+            timeLimit: const Duration(seconds: 10))
+            .timeout(const Duration(seconds: 12));
+      } catch (e) {
+        debugPrint("⚠️ Location fetch timeout or error: $e");
+        if (mounted) setState(() => _cityName = "");
+        return;
+      }
 
-      // City Name
+      // Reverse geocoding for city name
       try {
         List<Placemark> placemarks = await placemarkFromCoordinates(
             position.latitude, position.longitude);
-        if (placemarks.isNotEmpty) {
+        if (placemarks.isNotEmpty && mounted) {
           setState(() => _cityName = placemarks.first.locality ?? "Unknown");
         }
       } catch (_) {
-        // Si géocodage échoue, ne pas conserver une ville obsolète
         if (mounted) setState(() => _cityName = "");
       }
 
-      // API
+      // Fetch weather with timeout
       final url = Uri.parse(
           "https://api.open-meteo.com/v1/forecast?latitude=${position.latitude}&longitude=${position.longitude}&current=temperature_2m");
-      final response = await http.get(url);
+      
+      final response = await http.get(url)
+          .timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final temp = data['current']['temperature_2m'];
         final unit = data['current_units']['temperature_2m'] ?? "°C";
 
+        final tempStr = "${temp.round()}$unit";
+
         if (mounted) {
-          setState(() => _temperature = "${temp.round()}$unit");
+          setState(() => _temperature = tempStr);
         }
 
-        // Cache It
-        final prefs = await SharedPreferences.getInstance();
-        if (_cityName.isNotEmpty) {
-          await prefs.setString('cached_city', _cityName);
-          await prefs.setString('cached_city_date',
-              DateFormat('yyyy-MM-dd').format(DateTime.now()));
-        }
-        await prefs.setString('cached_temp', _temperature);
+        // Cache weather + date
+        await Future.wait([
+          if (_cityName.isNotEmpty)
+            prefs.setString('cached_city', _cityName),
+          prefs.setString('cached_temp', tempStr),
+          prefs.setString('cached_weather_date', today),
+        ]);
+        
+        debugPrint("✅ Weather cached for $today");
+      } else {
+        debugPrint("⚠️ Weather API error: ${response.statusCode}");
       }
     } catch (e) {
-      debugPrint("Weather Error: $e");
-      // En cas d'erreur réseau ou autre, ne pas conserver une ville potentiellement fausse
+      debugPrint("⚠️ Weather Error: $e");
       if (mounted) setState(() => _cityName = "");
-    } finally {
-      if (mounted) setState(() => _weatherLoading = false);
     }
   }
 
@@ -454,48 +513,85 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
 
   Widget _buildHeader() {
     return Center(
-      child: GlassCard(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        borderRadius: BorderRadius.circular(30),
-        child: Container(
-          decoration: _syncSuccess
-              ? BoxDecoration(
-                  borderRadius: BorderRadius.circular(30),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GlassCard(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            borderRadius: BorderRadius.circular(30),
+            child: Container(
+              decoration: _syncSuccess
+                  ? BoxDecoration(
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(
+                        color: AppTheme.neonGreen.withOpacity(0.6),
+                        width: 2,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.neonGreen.withOpacity(0.3),
+                          blurRadius: 12,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    )
+                  : null,
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_syncSuccess) ...[
+                    Icon(Icons.check_circle,
+                        color: AppTheme.neonGreen, size: 16),
+                    const SizedBox(width: 8),
+                  ],
+                  if (_cityName.isNotEmpty) ...[
+                    Text(_cityName.toUpperCase(), style: AppTheme.subText),
+                    const VerticalDivider(),
+                  ],
+                  if (_temperature.isNotEmpty) ...[
+                    Text(_temperature, style: AppTheme.subText),
+                    const VerticalDivider(),
+                  ],
+                  Text(DateFormat('dd MMM').format(DateTime.now()).toUpperCase(),
+                      style: AppTheme.subText),
+                ],
+              ),
+            ),
+          ),
+          // Manual sync indicator
+          if (_manualSyncDoneToday)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonGreen.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: AppTheme.neonGreen.withOpacity(0.6),
-                    width: 2,
+                    color: AppTheme.neonGreen.withOpacity(0.4),
+                    width: 1,
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.neonGreen.withOpacity(0.3),
-                      blurRadius: 12,
-                      spreadRadius: 2,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_circle_outline, 
+                      color: AppTheme.neonGreen, 
+                      size: 14),
+                    const SizedBox(width: 6),
+                    Text(
+                      "MANUAL SYNC DONE TODAY",
+                      style: AppTheme.labelSmall.copyWith(
+                        color: AppTheme.neonGreen,
+                        fontSize: 11,
+                      ),
                     ),
                   ],
-                )
-              : null,
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_syncSuccess) ...[
-                Icon(Icons.check_circle,
-                    color: AppTheme.neonGreen, size: 16),
-                const SizedBox(width: 8),
-              ],
-              if (_cityName.isNotEmpty) ...[
-                Text(_cityName.toUpperCase(), style: AppTheme.subText),
-                const VerticalDivider(),
-              ],
-              if (_temperature.isNotEmpty) ...[
-                Text(_temperature, style: AppTheme.subText),
-                const VerticalDivider(),
-              ],
-              Text(DateFormat('dd MMM').format(DateTime.now()).toUpperCase(),
-                  style: AppTheme.subText),
-            ],
-          ),
-        ),
+                ),
+              ).animate().fadeIn().slideY(begin: -0.5),
+            ),
+        ],
       ),
     );
   }

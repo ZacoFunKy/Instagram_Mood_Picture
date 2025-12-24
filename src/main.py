@@ -167,7 +167,7 @@ def save_daily_log(
         calendar_summary: Calendar events summary.
         execution_type: Time of execution (MATIN, APRES_MIDI, SOIREE, NUIT).
         dry_run: If True, skips save.
-        location: Location override (e.g., city name). If None, no location is saved.
+        location: Location override (e.g., city name). If None, retrieves last known location.
     """
     if dry_run:
         logger.info("Dry run: skipping database save")
@@ -176,6 +176,23 @@ def save_daily_log(
     try:
         db = mongo_client.get_database()
         logs_collection = db['daily_logs']
+
+        # If no location provided, try to get the last known location from overrides
+        final_location = location
+        if not final_location:
+            try:
+                # Try to get the last location from the mobile overrides collection
+                overrides_collection = db.get_collection('overrides')
+                # Find the most recent entry with a location
+                recent_override = overrides_collection.find_one(
+                    {"location": {"$exists": True, "$ne": None}},
+                    sort=[("last_updated", -1)]
+                )
+                if recent_override and recent_override.get("location"):
+                    final_location = recent_override.get("location")
+                    logger.info(f"[OK] Retrieved last known location from overrides: {final_location}")
+            except Exception as loc_error:
+                logger.warning(f"Could not retrieve location from overrides: {loc_error}")
 
         entry = {
             "date": datetime.datetime.now().strftime("%Y-%m-%d"),
@@ -188,9 +205,9 @@ def save_daily_log(
             "created_at": datetime.datetime.now().isoformat()
         }
         
-        # Only add location if explicitly provided and not None
-        if location:
-            entry["location"] = location
+        # Add location if available (either provided or retrieved)
+        if final_location:
+            entry["location"] = final_location
 
         mongo_client.save_log(logs_collection, entry)
         logger.info("Daily log saved to MongoDB")

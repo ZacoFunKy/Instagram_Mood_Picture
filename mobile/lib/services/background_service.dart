@@ -9,7 +9,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 
 import 'database_service.dart';
-import '../models/mood_entry.dart';
 
 const String taskName = "syncMoodData";
 
@@ -20,51 +19,75 @@ void callbackDispatcher() {
     debugPrint("🏗️ Background Task Started: $task");
 
     if (task == taskName) {
-      try {
-        // 1. Initialize Env (Required in background isolate)
-        await dotenv.load(fileName: ".env");
+      int retryCount = 0;
+      const maxRetries = 2;
 
-        // 2. Connect DB
-        await DatabaseService.instance.database
-            .timeout(const Duration(seconds: 30));
-
-        // 3. Get latest steps
-        final prefs = await SharedPreferences.getInstance();
-        int steps = prefs.getInt('last_known_steps') ?? 0;
-
-        // 4. Get Location (Best Effort)
-        String? city;
+      while (retryCount < maxRetries) {
         try {
-          // Check permission first (though WorkManager might skip if restricted)
-          LocationPermission permission = await Geolocator.checkPermission();
-          if (permission == LocationPermission.whileInUse ||
-              permission == LocationPermission.always) {
-            Position position = await Geolocator.getCurrentPosition(
-                desiredAccuracy: LocationAccuracy.medium,
-                timeLimit: const Duration(seconds: 10));
+          // 1. Initialize Env (Required in background isolate)
+          await dotenv.load(fileName: ".env");
 
-            List<Placemark> placemarks = await placemarkFromCoordinates(
-                position.latitude, position.longitude);
-
-            if (placemarks.isNotEmpty) {
-              city = placemarks.first.locality;
-              debugPrint("📍 Background Location: $city");
+          // 2. Connect DB with timeout
+          try {
+            await DatabaseService.instance.database
+                .timeout(const Duration(seconds: 30));
+          } catch (e) {
+            debugPrint("⚠️ DB Connection Failed (Retry $retryCount/$maxRetries): $e");
+            if (retryCount < maxRetries - 1) {
+              await Future.delayed(const Duration(seconds: 5));
+              retryCount++;
+              continue;
             }
-          } else {
-            debugPrint("⚠️ Background Location Permission Missing");
+            throw Exception("Max retries reached for DB connection");
           }
-        } catch (locError) {
-          debugPrint("⚠️ Background Location Error: $locError");
+
+          // 3. Get latest steps
+          final prefs = await SharedPreferences.getInstance();
+          int steps = prefs.getInt('last_known_steps') ?? 0;
+
+          // 4. Get Location (Best Effort)
+          String? city;
+          try {
+            // Check permission first (though WorkManager might skip if restricted)
+            LocationPermission permission = await Geolocator.checkPermission();
+            if (permission == LocationPermission.whileInUse ||
+                permission == LocationPermission.always) {
+              Position position = await Geolocator.getCurrentPosition(
+                  desiredAccuracy: LocationAccuracy.medium,
+                  timeLimit: const Duration(seconds: 10));
+
+              List<Placemark> placemarks = await placemarkFromCoordinates(
+                  position.latitude, position.longitude);
+
+              if (placemarks.isNotEmpty) {
+                city = placemarks.first.locality;
+                debugPrint("📍 Background Location: $city");
+              }
+            } else {
+              debugPrint("⚠️ Background Location Permission Missing");
+            }
+          } catch (locError) {
+            debugPrint("⚠️ Background Location Error (Non-blocking): $locError");
+            // Don't retry, location is optional
+          }
+
+          // 5. Perform Sync
+          await _performBackgroundSync(steps, city);
+
+          debugPrint("✅ Background Task Completed Successfully");
+          return Future.value(true);
+        } catch (e) {
+          debugPrint("❌ Background Task Error (Retry $retryCount/$maxRetries): $e");
+          if (retryCount < maxRetries - 1) {
+            retryCount++;
+            await Future.delayed(const Duration(seconds: 5));
+          } else {
+            debugPrint("❌ Background Task Failed after $maxRetries retries");
+            return Future.value(false);
+          }
         }
-
-        // 5. Perform Sync
-        await _performBackgroundSync(steps, city);
-
-        return Future.value(true);
-      } catch (e) {
-        debugPrint("❌ Background Task Failed: $e");
-        return Future.value(false);
       }
+      return Future.value(false);
     }
     return Future.value(true);
   });
@@ -72,8 +95,10 @@ void callbackDispatcher() {
 
 Future<void> _performBackgroundSync(int steps, String? location) async {
   final collection = await DatabaseService.instance.overrides;
+  final prefs = await SharedPreferences.getInstance();
 
   final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  final now = DateTime.now().toIso8601String();
 
   // Vérifier si une entrée existe déjà pour aujourd'hui
   final existingDoc = await collection.findOne(mongo.where.eq('date', dateStr));
@@ -83,7 +108,8 @@ Future<void> _performBackgroundSync(int steps, String? location) async {
     // Ne PAS toucher aux valeurs sleep_hours, energy, stress, social
     var modifier = mongo.modify
         .set('steps_count', steps)
-        .set('last_updated', DateTime.now().toIso8601String())
+        .set('last_updated', now)
+        .set('last_auto_sync', now)  // Track when the auto-sync happened
         .set('device', 'android_bg_sync');
 
     if (location != null) {
@@ -91,14 +117,19 @@ Future<void> _performBackgroundSync(int steps, String? location) async {
     }
 
     await collection.update(mongo.where.eq('date', dateStr), modifier);
-    debugPrint("✅ Background Sync Complete (Update): $steps steps");
+    
+    // Update cache: Track last automatic sync timestamp
+    await prefs.setString('last_auto_sync_timestamp', now);
+    
+    debugPrint("✅ Background Sync Complete (Update): $steps steps at $now");
   } else {
     // Si aucune entrée n'existe, créer une nouvelle entrée SANS valeurs par défaut
     // pour sleep_hours (ne pas mettre 0, laisser le backend gérer)
     var newDoc = {
       'date': dateStr,
       'steps_count': steps,
-      'last_updated': DateTime.now().toIso8601String(),
+      'last_updated': now,
+      'last_auto_sync': now,  // Track when the auto-sync happened
       'device': 'android_bg_sync',
     };
 
@@ -107,6 +138,10 @@ Future<void> _performBackgroundSync(int steps, String? location) async {
     }
 
     await collection.insert(newDoc);
-    debugPrint("✅ Background Sync Complete (Insert): $steps steps");
+    
+    // Update cache: Track last automatic sync timestamp
+    await prefs.setString('last_auto_sync_timestamp', now);
+    
+    debugPrint("✅ Background Sync Complete (Insert): $steps steps at $now");
   }
 }

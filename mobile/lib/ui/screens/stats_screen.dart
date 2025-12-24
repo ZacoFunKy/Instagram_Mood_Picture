@@ -2,14 +2,12 @@ import 'dart:math';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
 
 import '../../models/mood_entry.dart';
 import '../../services/database_service.dart';
 import '../../utils/app_theme.dart';
-import '../widgets/glass_card.dart';
 
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
@@ -434,8 +432,9 @@ class _StatsScreenState extends State<StatsScreen> {
                   showTitles: true,
                   getTitlesWidget: (val, meta) {
                     if (val.toInt() < 0 ||
-                        val.toInt() >= _recentEntries.length)
+                        val.toInt() >= _recentEntries.length) {
                       return const SizedBox.shrink();
+                    }
                     final entry = _recentEntries[val.toInt()];
                     try {
                       final date = DateTime.parse(entry.date);

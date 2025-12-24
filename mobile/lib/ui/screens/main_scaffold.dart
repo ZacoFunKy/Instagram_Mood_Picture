@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import '../widgets/glass_card.dart';
 import 'input_screen.dart';
 import 'history_screen.dart';
 import 'stats_screen.dart';
@@ -51,30 +50,18 @@ class _MainScaffoldState extends State<MainScaffold> {
             right: 20,
             bottom: 20,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.white.withOpacity(0.1),
-                    Colors.white.withOpacity(0.05),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(32),
+                color: Colors.black87,
+                borderRadius: BorderRadius.circular(28),
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.2),
-                  width: 1.5,
+                  color: Colors.white.withOpacity(0.1),
+                  width: 1.0,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 32,
-                    spreadRadius: 4,
-                  ),
-                  BoxShadow(
-                    color: AppTheme.neonGreen.withOpacity(0.1),
-                    blurRadius: 16,
+                    color: Colors.black.withOpacity(0.5),
+                    blurRadius: 20,
                     spreadRadius: 2,
                   ),
                 ],
@@ -105,42 +92,32 @@ class _MainScaffoldState extends State<MainScaffold> {
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          gradient: isSelected
-              ? LinearGradient(
-                  colors: [
-                    AppTheme.neonGreen.withOpacity(0.3),
-                    AppTheme.neonGreen.withOpacity(0.1),
-                  ],
-                )
-              : LinearGradient(
-                  colors: [
-                    Colors.transparent,
-                    Colors.transparent,
-                  ],
-                ),
+          color: isSelected
+              ? AppTheme.neonGreen.withOpacity(0.15)
+              : Colors.transparent,
           shape: BoxShape.circle,
           border: Border.all(
             color: isSelected
-                ? AppTheme.neonGreen.withOpacity(0.5)
-                : Colors.transparent,
-            width: 1.5,
+                ? AppTheme.neonGreen.withOpacity(0.6)
+                : Colors.white.withOpacity(0.15),
+            width: 1.2,
           ),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: AppTheme.neonGreen.withOpacity(0.4),
-                    blurRadius: 16,
-                    spreadRadius: 2,
+                    color: AppTheme.neonGreen.withOpacity(0.25),
+                    blurRadius: 12,
+                    spreadRadius: 1,
                   ),
                 ]
               : [],
         ),
         child: Icon(
           isSelected ? activeIcon : icon,
-          color: isSelected ? AppTheme.neonGreen : Colors.white54,
-          size: 28,
+          color: isSelected ? AppTheme.neonGreen : Colors.white38,
+          size: 26,
         ),
       ),
     ).animate().fadeIn().scale();
