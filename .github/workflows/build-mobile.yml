@@ -23,13 +23,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Setup Java
         uses: actions/setup-java@v3
         with:
           distribution: 'zulu'
           java-version: '17'
+          cache: 'gradle'
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -164,8 +165,7 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
       
-      - name: Clean Build Artifacts
-        run: flutter clean
+      # Removed 'flutter clean' (redundant on fresh CI runner)
 
       - name: Generate Launcher Icons
         run: |
