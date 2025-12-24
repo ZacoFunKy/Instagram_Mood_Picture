@@ -34,6 +34,14 @@ class MainActivity: FlutterActivity() {
                     val isPlaying = isMediaPlaying()
                     result.success(isPlaying)
                 }
+                "isNotificationListenerEnabled" -> {
+                    val isEnabled = isNotificationListenerEnabled()
+                    result.success(isEnabled)
+                }
+                "openNotificationListenerSettings" -> {
+                    openNotificationListenerSettings()
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -54,12 +62,30 @@ class MainActivity: FlutterActivity() {
         )
     }
 
+    private fun isNotificationListenerEnabled(): Boolean {
+        val packageName = packageName
+        val flat = android.provider.Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
+        return flat != null && flat.contains(packageName)
+    }
+
+    private fun openNotificationListenerSettings() {
+        val intent = android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+        startActivity(intent)
+    }
+
     private fun getCurrentMediaMetadata(): Map<String, String>? {
         mediaSessionManager = getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
         
-        val activeSessions = mediaSessionManager?.getActiveSessions(
-            ComponentName(this, NotificationListener::class.java)
-        ) ?: return null
+        // Check permission first to avoid crash or null
+        if (!isNotificationListenerEnabled()) return null
+
+        val activeSessions = try {
+            mediaSessionManager?.getActiveSessions(
+                ComponentName(this, NotificationListener::class.java)
+            )
+        } catch (e: SecurityException) {
+            return null
+        } ?: return null
         
         for (controller in activeSessions) {
             val metadata = controller.metadata ?: continue
@@ -82,9 +108,15 @@ class MainActivity: FlutterActivity() {
     private fun isMediaPlaying(): Boolean {
         mediaSessionManager = getSystemService(MEDIA_SESSION_SERVICE) as MediaSessionManager
         
-        val activeSessions = mediaSessionManager?.getActiveSessions(
-            ComponentName(this, NotificationListener::class.java)
-        ) ?: return false
+        if (!isNotificationListenerEnabled()) return false
+
+        val activeSessions = try {
+             mediaSessionManager?.getActiveSessions(
+                ComponentName(this, NotificationListener::class.java)
+            )
+        } catch (e: SecurityException) {
+            return false
+        } ?: return false
         
         return activeSessions.any { it.playbackState?.state == android.media.session.PlaybackState.STATE_PLAYING }
     }

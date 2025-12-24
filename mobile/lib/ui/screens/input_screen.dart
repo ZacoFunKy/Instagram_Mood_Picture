@@ -9,19 +9,16 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../models/mood_entry.dart';
 import '../../services/database_service.dart';
 import '../../services/pedometer_service.dart';
-import '../../services/cache_service.dart';
 import '../../services/youtube_music_service.dart';
 import '../../services/spotify_enrichment_service.dart';
 import '../../services/google_calendar_service.dart';
 import '../../services/sleep_tracking_service.dart';
-import '../../services/adaptive_weights_service.dart';
 import '../../utils/app_theme.dart';
 import '../../logic/mood_logic.dart';
 
@@ -62,13 +59,13 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
 
   // Cache
   List<Map<String, dynamic>> _todayEvents = [];
-  Map<String, dynamic>? _musicMetrics;
+  List<Map<String, dynamic>> _recentEnrichedTracks = [];
 
   // Services
   final _sleepTrackingService = SleepTrackingService();
   final _calendarService = GoogleCalendarService();
   final _musicService = YouTubeMusicService();
-  final _adaptiveService = AdaptiveWeightsService();
+  final _spotifyService = SpotifyEnrichmentService();
 
   @override
   void initState() {
@@ -90,11 +87,12 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     try {
       // 1. Pedometer
       await PedometerService.instance.init();
+      final pedometerGranted = await Permission.activityRecognition.isGranted;
+      if (mounted) setState(() => _isPedometerActive = pedometerGranted);
+
       PedometerService.instance.stepStream.listen((steps) {
         if (mounted) setState(() => _currentSteps = steps);
       });
-      // Check if pedometer has valid steps
-      if (_currentSteps > 0) setState(() => _isPedometerActive = true);
 
       // 2. Sleep (Only override if not already loaded from cache/sync)
       if (!_manualSyncDoneToday) {
@@ -116,25 +114,41 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
 
       // 3. Calendar
       try {
-        final events = await _calendarService.getTodayEvents();
-        if (mounted) {
-          setState(() {
-            _todayEvents = events;
-            _isCalendarConnected = events.isNotEmpty;
-          });
+        // Try sign in silently first to check connection
+        final isSignedIn = await _calendarService.signIn(); // Or specific check
+        if (mounted) setState(() => _isCalendarConnected = isSignedIn);
+
+        if (isSignedIn) {
+          final events = await _calendarService.getTodayEvents();
+          if (mounted) {
+            setState(() {
+              _todayEvents = events;
+            });
+          }
         }
       } catch (e) {
         debugPrint("Calendar init error: $e");
       }
 
-      // 4. Music - Check connection specifically
-      _checkMusicConnection();
-      _musicService.trackStream.listen((track) {
-        if (track != null && mounted) {
-          setState(() => _isMusicConnected = true);
-          // Simulate metrics for now or fetch real ones
-          _musicMetrics = {'energy': 0.7, 'valence': 0.5};
-          _recalculatePrediction();
+      // 4. Music - Listen & Enrich
+      _checkMusicConnection(); // Check initial state
+
+      // Load any existing history first
+      _processMusicHistory(_musicService.getRecentTracks());
+
+      // Check Permission for Music Listener
+      final musicPermGranted =
+          await _musicService.isNotificationPermissionGranted();
+      if (!musicPermGranted && mounted) {
+        // Delay slightly to let UI settle, then show dialog
+        Future.delayed(const Duration(seconds: 1), _showMusicPermissionDialog);
+      }
+
+      _musicService.trackStream.listen((track) async {
+        if (track != null) {
+          // Track is already added to history self by Service
+          // We just need to refresh our enriched list
+          await _processMusicHistory(_musicService.getRecentTracks());
         }
       });
 
@@ -150,6 +164,14 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
 
   Future<void> _checkMusicConnection() async {
     try {
+      // Check if we can get current track (implies permission/service ready)
+      final track = await _musicService.getCurrentTrack();
+      if (track != null) {
+        if (mounted) setState(() => _isMusicConnected = true);
+        return;
+      }
+
+      // Fallback to playing check
       bool isPlaying = await _musicService.isPlaying();
       if (mounted) setState(() => _isMusicConnected = isPlaying);
     } catch (_) {}
@@ -174,8 +196,11 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         final placemarks =
             await placemarkFromCoordinates(pos.latitude, pos.longitude);
         if (placemarks.isNotEmpty) {
-          if (mounted)
-            setState(() => _cityName = placemarks.first.locality ?? "Unknown");
+          final city = placemarks.first.locality ?? "Unknown";
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('cached_location', city);
+
+          if (mounted) setState(() => _cityName = city);
         }
       } catch (e) {
         debugPrint("Geocoding error: $e");
@@ -187,14 +212,51 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (mounted) {
+          final temp = "${data['current']['temperature_2m']}°C";
+          final emoji = _getWeatherEmoji(data['current']['weathercode']);
+
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('cached_temperature', temp);
+          await prefs.setString('cached_weather_emoji', emoji);
+
           setState(() {
-            _temperature = "${data['current']['temperature_2m']}°C";
-            _weatherEmoji = _getWeatherEmoji(data['current']['weathercode']);
+            _temperature = temp;
+            _weatherEmoji = emoji;
           });
           _recalculatePrediction();
         }
       }
     } catch (_) {}
+  }
+
+  // === MUSIC ENRICHMENT HELPER ===
+  Future<void> _processMusicHistory(
+      List<Map<String, dynamic>> rawTracks) async {
+    if (rawTracks.isEmpty) return;
+
+    List<Map<String, dynamic>> enriched = [];
+    for (var track in rawTracks) {
+      // Create a copy to modify
+      var trackData = Map<String, dynamic>.from(track);
+
+      // Enrich if not already done (assuming service doesn't store enrichment yet,
+      // but if we want to be efficient we should probably store it in service too.
+      // For now, simple enrichment on read)
+      final features = await _spotifyService.getAudioFeatures(
+          trackData['title'], trackData['artist']);
+
+      trackData['energy'] = features['energy'];
+      trackData['valence'] = features['valence'];
+      enriched.add(trackData);
+    }
+
+    if (mounted) {
+      setState(() {
+        _recentEnrichedTracks = enriched;
+        _isMusicConnected = true; // Green if we have data!
+      });
+      _recalculatePrediction();
+    }
   }
 
   String _getWeatherEmoji(int code) {
@@ -209,7 +271,16 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     final prefs = await SharedPreferences.getInstance();
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
-    // Check if we already synced today
+    // 1. Always load independent cache first (Location/Weather don't depend on sync date)
+    if (mounted) {
+      setState(() {
+        _cityName = prefs.getString('cached_location') ?? "Locating...";
+        _temperature = prefs.getString('cached_temperature') ?? "";
+        _weatherEmoji = prefs.getString('cached_weather_emoji') ?? "";
+      });
+    }
+
+    // 2. Check if we already synced today for daily metrics
     if (prefs.getString('last_sync_date') == today) {
       double cachedSleep = prefs.getDouble('cached_sleep') ?? 7.5;
       int hours = cachedSleep.floor();
@@ -222,7 +293,6 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
           _stressLevel = prefs.getDouble('cached_stress') ?? 0.5;
           _socialLevel = prefs.getDouble('cached_social') ?? 0.5;
           _manualSyncDoneToday = true; // Use this to lock init
-          _cityName = prefs.getString('cached_location') ?? "Stored Loc";
         });
       }
     }
@@ -246,7 +316,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
       energyLevel: _energyLevel,
       stressLevel: _stressLevel,
       socialLevel: _socialLevel,
-      musicMetrics: _musicMetrics,
+      recentTracks: _recentEnrichedTracks,
     );
     if (mounted && mood != _predictedMood) {
       setState(() => _predictedMood = mood.toUpperCase());
@@ -283,6 +353,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
       await prefs.setDouble('cached_stress', _stressLevel);
       await prefs.setDouble('cached_social', _socialLevel);
       await prefs.setString('cached_location', _cityName); // Cache Location
+      await prefs.setString('cached_temperature', _temperature);
+      await prefs.setString('cached_weather_emoji', _weatherEmoji);
 
       if (mounted) {
         setState(() {
@@ -302,6 +374,198 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
       SnackBar(
           content: const Text("Synced successfully!"),
           backgroundColor: AppTheme.neonGreen),
+    );
+  }
+
+  void _showStepsDialog() {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: "Steps",
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (context, anim1, anim2) {
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              margin: const EdgeInsets.all(32),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1E1E).withOpacity(0.95),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                    color: AppTheme.neonGreen.withOpacity(0.3), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.neonGreen.withOpacity(0.1),
+                    blurRadius: 20,
+                    spreadRadius: 5,
+                  )
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.neonGreen.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.directions_walk,
+                        color: AppTheme.neonGreen, size: 32),
+                  ),
+                  const SizedBox(height: 20),
+                  Text("ACTIVITY LEVEL",
+                      style: AppTheme.headerLarge
+                          .copyWith(fontSize: 18, letterSpacing: 1.2)),
+                  const SizedBox(height: 8),
+                  Text("Total steps today",
+                      style: AppTheme.subText.copyWith(color: Colors.white54)),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        _currentSteps.toString(),
+                        style: GoogleFonts.spaceMono(
+                          fontSize: 48,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "${(_currentSteps / 1000).toStringAsFixed(1)} km est.",
+                    style: AppTheme.subText
+                        .copyWith(fontSize: 12, color: AppTheme.neonCyan),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.neonGreen.withOpacity(0.2),
+                        foregroundColor: AppTheme.neonGreen,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                        side: BorderSide(
+                            color: AppTheme.neonGreen.withOpacity(0.5)),
+                      ),
+                      child: const Text("KEEP MOVING",
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, anim1, anim2, child) {
+        return Transform.scale(
+          scale: Curves.easeOutBack.transform(anim1.value),
+          child: FadeTransition(opacity: anim1, child: child),
+        );
+      },
+    );
+  }
+
+  void _showMusicPermissionDialog() {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: "Music Permission",
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (context, anim1, anim2) {
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              margin: const EdgeInsets.all(32),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1E1E).withOpacity(0.95),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                    color: AppTheme.neonPurple.withOpacity(0.3), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.neonPurple.withOpacity(0.1),
+                    blurRadius: 20,
+                    spreadRadius: 5,
+                  )
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.neonPurple.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.music_note,
+                        color: AppTheme.neonPurple, size: 32),
+                  ),
+                  const SizedBox(height: 20),
+                  Text("MUSIC SYNC",
+                      style: AppTheme.headerLarge
+                          .copyWith(fontSize: 18, letterSpacing: 1.2)),
+                  const SizedBox(height: 12),
+                  const Text(
+                    "To detect what you're listening to and analyze your mood, we need 'Notification Access'.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70, height: 1.5),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _musicService.requestNotificationPermission();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.neonPurple.withOpacity(0.2),
+                        foregroundColor: AppTheme.neonPurple,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                        side: BorderSide(
+                            color: AppTheme.neonPurple.withOpacity(0.5)),
+                      ),
+                      child: const Text("ENABLE ACCESS",
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text("Maybe Later",
+                        style: TextStyle(color: Colors.white38)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, anim1, anim2, child) {
+        return Transform.scale(
+          scale: Curves.easeOutBack.transform(anim1.value),
+          child: FadeTransition(opacity: anim1, child: child),
+        );
+      },
     );
   }
 
@@ -408,23 +672,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         _buildStatusChip(Icons.calendar_today, "Events", _isCalendarConnected),
         _buildStatusChip(Icons.music_note, "Music", _isMusicConnected),
         GestureDetector(
-            onTap: () {
-              showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                        backgroundColor: Colors.black,
-                        title: const Text("Pedometer Stats",
-                            style: TextStyle(color: Colors.white)),
-                        content: Text("Steps today: $_currentSteps",
-                            style: const TextStyle(
-                                color: AppTheme.neonGreen, fontSize: 24)),
-                        actions: [
-                          TextButton(
-                              onPressed: () => Navigator.pop(ctx),
-                              child: const Text("OK"))
-                        ],
-                      ));
-            },
+            onTap: _showStepsDialog,
             child: _buildStatusChip(
                 Icons.directions_walk, "Steps", _isPedometerActive)),
       ],

@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 /// Configuration constants for Mood Analyzer
 /// Matches src/core/analyzer.py
 class MoodAnalyzerConfig {
@@ -213,7 +211,8 @@ class MoodLogic {
     required double energyLevel, // User slider 0-1
     required double stressLevel, // User slider 0-1
     required double socialLevel, // User slider 0-1
-    required Map<String, dynamic>? musicMetrics,
+    required List<Map<String, dynamic>>
+        recentTracks, // CHANGED: Now takes full history
   }) {
     final scores = <String, double>{
       'creative': 0.0,
@@ -298,20 +297,36 @@ class MoodLogic {
       addScore(MoodCategory.pumped, SignalStrength.moderate);
     }
 
-    // 4. MUSIC ANALYSIS
-    if (musicMetrics != null) {
-      final energy = (musicMetrics['energy'] as num?)?.toDouble() ?? 0.5;
-      final valence = (musicMetrics['valence'] as num?)?.toDouble() ?? 0.5;
+    // 4. MUSIC ANALYSIS (Weighted Average of History)
+    if (recentTracks.isNotEmpty) {
+      double totalEnergy = 0.0;
+      double totalValence = 0.0;
+      int count = 0;
 
-      if (energy > 0.7) {
-        addScore(MoodCategory.pumped, SignalStrength.strong);
-        addScore(MoodCategory.energetic, SignalStrength.strong);
-      } else if (energy < 0.4) {
-        addScore(MoodCategory.chill, SignalStrength.strong);
+      for (var track in recentTracks) {
+        // Tracks should have 'energy' and 'valence' enriched by SpotifyService
+        // If not present, we assume neutral (0.5) or skip
+        if (track['energy'] != null && track['valence'] != null) {
+          totalEnergy += (track['energy'] as num).toDouble();
+          totalValence += (track['valence'] as num).toDouble();
+          count++;
+        }
       }
 
-      if (valence > 0.7) {
-        addScore(MoodCategory.confident, SignalStrength.moderate);
+      if (count > 0) {
+        double avgEnergy = totalEnergy / count;
+        double avgValence = totalValence / count;
+
+        if (avgEnergy > 0.7) {
+          addScore(MoodCategory.pumped, SignalStrength.strong);
+          addScore(MoodCategory.energetic, SignalStrength.strong);
+        } else if (avgEnergy < 0.4) {
+          addScore(MoodCategory.chill, SignalStrength.strong);
+        }
+
+        if (avgValence > 0.7) {
+          addScore(MoodCategory.confident, SignalStrength.moderate);
+        }
       }
     }
 
