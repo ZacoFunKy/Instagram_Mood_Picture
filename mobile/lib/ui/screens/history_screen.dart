@@ -474,6 +474,83 @@ class _DetailModal extends StatelessWidget {
                     const SizedBox(height: 24),
                   ],
 
+            // Gemini Prompt
+                  if (entry.geminiPrompt != null && entry.geminiPrompt!.isNotEmpty) ...[
+                    _buildDetailSection(
+                      "AI PROMPT (Gemini)",
+                      entry.geminiPrompt!.length > 500
+                          ? entry.geminiPrompt!.substring(0, 500) + "..."
+                          : entry.geminiPrompt!,
+                      fontSize: 11,
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // Algo Prediction
+                  if (entry.algoPrediction != null &&
+                      entry.algoPrediction!.isNotEmpty) ...[
+                    _buildDetailSection(
+                      "ALGORITHM PREDICTION",
+                      entry.algoPrediction!.toUpperCase(),
+                      color: AppTheme.neonPurple,
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // Weather Data
+                  if (entry.weatherSummary != null &&
+                      entry.weatherSummary!.isNotEmpty) ...[
+                    _buildDetailSection(
+                      "WEATHER DATA",
+                      entry.weatherSummary!,
+                      fontSize: 12,
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // Music Data
+                  if (entry.musicSummary != null &&
+                      entry.musicSummary!.isNotEmpty) ...[
+                    _buildDetailSection(
+                      "MUSIC ANALYSIS",
+                      entry.musicSummary!.length > 300
+                          ? entry.musicSummary!.substring(0, 300) + "..."
+                          : entry.musicSummary!,
+                      fontSize: 11,
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // Music Metrics (if available)
+                  if (entry.musicMetrics != null && entry.musicMetrics!.isNotEmpty) ...[
+                    Text("MUSIC METRICS", style: AppTheme.labelSmall),
+                    const SizedBox(height: 12),
+                    _buildMetricBar(
+                      "Valence",
+                      (entry.musicMetrics!['avg_valence'] as num? ?? 0).toDouble().clamp(0.0, 1.0),
+                      AppTheme.neonGreen,
+                    ),
+                    _buildMetricBar(
+                      "Energy",
+                      (entry.musicMetrics!['avg_energy'] as num? ?? 0).toDouble().clamp(0.0, 1.0),
+                      AppTheme.neonPink,
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // Calendar Data
+                  if (entry.calendarSummary != null &&
+                      entry.calendarSummary!.isNotEmpty) ...[
+                    _buildDetailSection(
+                      "CALENDAR EVENTS",
+                      entry.calendarSummary!.length > 300
+                          ? entry.calendarSummary!.substring(0, 300) + "..."
+                          : entry.calendarSummary!,
+                      fontSize: 11,
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
                   // User Feedback Metrics
                   if (entry.energy != null ||
                       entry.stress != null ||

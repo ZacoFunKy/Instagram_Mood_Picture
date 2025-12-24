@@ -155,19 +155,33 @@ def save_daily_log(
     calendar_summary: str,
     execution_type: str,
     dry_run: bool,
-    location: str = None
+    location: str = None,
+    gemini_prompt: str = None,
+    algo_prediction: str = None,
+    weather_summary: str = None,
+    sleep_hours: float = None,
+    feedback_metrics: Dict[str, float] = None,
+    steps_count: int = None,
+    music_metrics: Dict[str, Any] = None,
 ) -> None:
     """
-    Saves execution log to MongoDB.
+    Saves execution log to MongoDB with rich metadata.
 
     Args:
         weekday: Current weekday.
-        mood: Predicted mood.
+        mood: Predicted mood (Gemini).
         music_summary: Music history summary.
         calendar_summary: Calendar events summary.
         execution_type: Time of execution (MATIN, APRES_MIDI, SOIREE, NUIT).
         dry_run: If True, skips save.
-        location: Location override (e.g., city name). If None, retrieves last known location.
+        location: Location override (e.g., city name).
+        gemini_prompt: The prompt sent to Gemini AI.
+        algo_prediction: The prediction from the pre-processor algorithm.
+        weather_summary: Weather data used.
+        sleep_hours: Sleep duration used.
+        feedback_metrics: User feedback (energy, stress, social).
+        steps_count: Step count used.
+        music_metrics: Music metrics (valence, energy, tempo, etc).
     """
     if dry_run:
         logger.info("Dry run: skipping database save")
@@ -202,7 +216,15 @@ def save_daily_log(
             "calendar_summary": calendar_summary[:500] if len(calendar_summary) > 500 else calendar_summary,
             "week_rhythm": "Standard", # Placeholder
             "execution_type": execution_type,
-            "created_at": datetime.datetime.now().isoformat()
+            "created_at": datetime.datetime.now().isoformat(),
+            # Rich metadata for detailed analysis
+            "gemini_prompt": gemini_prompt,  # Full prompt sent to AI
+            "algo_prediction": algo_prediction,  # Pre-processor result
+            "weather_summary": weather_summary,  # Weather data
+            "sleep_hours": sleep_hours,  # Sleep used in analysis
+            "feedback_metrics": feedback_metrics,  # User input (energy, stress, social)
+            "steps_count": steps_count,  # Activity count
+            "music_metrics": music_metrics,  # Spotify metrics (valence, energy, tempo)
         }
         
         # Add location if available (either provided or retrieved)
@@ -547,6 +569,8 @@ def main() -> None:
     # ========================================================================
     logger.info(">>> STEP 2: Predicting mood...")
     mood = DEFAULT_FALLBACK_MOOD
+    gemini_prompt = None
+    algo_prediction = None
 
     if args.no_ai:
         logger.info("Skipping AI prediction (--no-ai). Using default: 'energetic'")
@@ -569,9 +593,9 @@ def main() -> None:
 
             if isinstance(result, dict) and args.dry_run:
                 mood = str(result.get("mood", DEFAULT_FALLBACK_MOOD))
-                prompt = result.get("prompt", "")
+                gemini_prompt = result.get("prompt", "")
                 with open(DRY_RUN_PROMPT_FILE, "w", encoding="utf-8") as f:
-                    f.write(f"--- PROMPT GENERATED ON {now_dt} ---\n{prompt}")
+                    f.write(f"--- PROMPT GENERATED ON {now_dt} ---\n{gemini_prompt}")
                 logger.info(f"Dry run: Prompt saved to {DRY_RUN_PROMPT_FILE}")
             else:
                 mood = str(result)
@@ -607,7 +631,17 @@ def main() -> None:
     # Avoid "Bordeaux (Default/History)" - leave as None/empty if missing
     final_location = override_location if (override_location and override_location.strip()) else None
     
-    save_daily_log(weekday, mood, music_summary, calendar_summary, current_exec_type, args.dry_run, location=final_location)
+    save_daily_log(
+        weekday, mood, music_summary, calendar_summary, current_exec_type, args.dry_run,
+        location=final_location,
+        gemini_prompt=gemini_prompt,
+        algo_prediction=None,  # Will add this from analyzer
+        weather_summary=weather_summary,
+        sleep_hours=sleep_info.get("sleep_hours") if sleep_info else None,
+        feedback_metrics=feedback_metrics,
+        steps_count=steps_count,
+        music_metrics=music_metrics,
+    )
 
     logger.info("--- Execution Complete ---")
 

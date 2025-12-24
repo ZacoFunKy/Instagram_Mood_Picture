@@ -315,10 +315,12 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         if (mounted) {
           setState(() {
             _syncSuccess = true;
+            _manualSyncDoneToday = true;  // Persist across day
             _isSyncing = false;
           });
           _showSuccessDialog();
 
+          // Reset only _syncSuccess animation after 2 seconds, keep _manualSyncDoneToday
           Future.delayed(const Duration(seconds: 2), () {
             if (mounted) setState(() => _syncSuccess = false);
           });
@@ -559,37 +561,45 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
               ),
             ),
           ),
-          // Manual sync indicator
+          // Manual sync indicator - persistent throughout the day
           if (_manualSyncDoneToday)
             Padding(
-              padding: const EdgeInsets.only(top: 12),
+              padding: const EdgeInsets.only(top: 16),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: AppTheme.neonGreen.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(16),
+                  color: AppTheme.neonGreen.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: AppTheme.neonGreen.withOpacity(0.4),
-                    width: 1,
+                    color: AppTheme.neonGreen.withOpacity(0.5),
+                    width: 1.5,
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.neonGreen.withOpacity(0.2),
+                      blurRadius: 12,
+                      spreadRadius: 1,
+                    ),
+                  ],
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.check_circle_outline, 
+                    Icon(Icons.check_circle, 
                       color: AppTheme.neonGreen, 
-                      size: 14),
-                    const SizedBox(width: 6),
+                      size: 16),
+                    const SizedBox(width: 8),
                     Text(
                       "MANUAL SYNC DONE TODAY",
                       style: AppTheme.labelSmall.copyWith(
                         color: AppTheme.neonGreen,
-                        fontSize: 11,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
-              ).animate().fadeIn().slideY(begin: -0.5),
+              ).animate().fadeIn().slideY(begin: -0.8),
             ),
         ],
       ),

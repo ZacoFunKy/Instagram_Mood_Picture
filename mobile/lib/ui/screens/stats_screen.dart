@@ -118,17 +118,24 @@ class _StatsScreenState extends State<StatsScreen> {
     if (entries.isEmpty) return;
 
     double totalSleep = 0;
+    int sleepCount = 0;
     List<double> energyValues = [];
     List<double> stressValues = [];
 
     for (var e in entries) {
-      totalSleep += e.sleepHours;
+      // Only count sleep hours that are > 0 (valid data)
+      if (e.sleepHours > 0) {
+        totalSleep += e.sleepHours;
+        sleepCount++;
+      }
       if (e.energy != null) energyValues.add(e.energy!);
       if (e.stress != null) stressValues.add(e.stress!);
     }
 
-    int count = entries.length;
-    _avgSleep = "${(totalSleep / count).toStringAsFixed(1)}h";
+    // Calculate average sleep only from valid entries
+    _avgSleep = sleepCount > 0
+        ? "${(totalSleep / sleepCount).toStringAsFixed(1)}h"
+        : "-";
 
     _avgEnergy = energyValues.isEmpty
         ? "-"
