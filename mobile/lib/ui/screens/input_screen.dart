@@ -17,6 +17,7 @@ import '../../models/mood_entry.dart';
 import '../../services/database_service.dart';
 import '../../services/pedometer_service.dart';
 import '../../utils/app_theme.dart';
+import '../../utils/mood_analyzer.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/interactive_segmented_bar.dart';
 import '../widgets/neon_btn.dart';
@@ -531,12 +532,12 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _buildHeader(),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             // Sleep + Metrics + Steps in compact grid
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -563,14 +564,13 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
                     ],
                   ),
                 ),
-                ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             _buildLivePredictionPreview(),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             _buildSyncButton(),
-            const SizedBox(height: 20),
+            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -578,86 +578,84 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildHeader() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        GlassCard(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          borderRadius: BorderRadius.circular(24),
-          child: Container(
-            decoration: _syncSuccess
-                ? BoxDecoration(
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: AppTheme.neonGreen.withOpacity(0.6),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.neonGreen.withOpacity(0.2),
-                        blurRadius: 8,
-                        spreadRadius: 1,
-                      ),
+    return GlassCard(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      borderRadius: BorderRadius.circular(20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Location & Weather
+              Expanded(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_cityName.isNotEmpty) ...[
+                      Text(_cityName.toUpperCase(), 
+                        style: AppTheme.subText.copyWith(fontSize: 10)),
+                      const SizedBox(width: 6),
                     ],
-                  )
-                : null,
-            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_syncSuccess) ...[
-                  Icon(Icons.check_circle,
-                      color: AppTheme.neonGreen, size: 14),
-                  const SizedBox(width: 6),
-                ],
-                if (_cityName.isNotEmpty) ...[
-                  Text(_cityName.toUpperCase(), style: AppTheme.subText.copyWith(fontSize: 11)),
-                  const VerticalDivider(),
-                ],
-                if (_temperature.isNotEmpty) ...[
-                  Text(_temperature, style: AppTheme.subText.copyWith(fontSize: 11)),
-                  const VerticalDivider(),
-                ],
-                Text(DateFormat('dd MMM').format(DateTime.now()).toUpperCase(),
-                    style: AppTheme.subText.copyWith(fontSize: 11)),
-              ],
-            ),
-          ),
-        ),
-        // Manual sync indicator - persistent throughout the day
-        if (_manualSyncDoneToday)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppTheme.neonGreen.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: AppTheme.neonGreen.withOpacity(0.4),
-                  width: 1,
+                    if (_temperature.isNotEmpty)
+                      Text(_temperature, 
+                        style: AppTheme.subText.copyWith(fontSize: 10)),
+                  ],
                 ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.check_circle, 
-                    color: AppTheme.neonGreen, 
-                    size: 14),
-                  const SizedBox(width: 6),
-                  Text(
-                    "MANUAL SYNC DONE TODAY",
-                    style: AppTheme.labelSmall.copyWith(
-                      color: AppTheme.neonGreen,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ).animate().fadeIn().slideY(begin: -0.8),
+              // Date
+              Text(DateFormat('dd MMM').format(DateTime.now()).toUpperCase(),
+                  style: AppTheme.subText.copyWith(fontSize: 10)),
+            ],
           ),
-      ],
+          // Manual sync indicator - compact and prominent
+          if (_manualSyncDoneToday)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppTheme.neonGreen.withOpacity(0.2),
+                      AppTheme.neonGreen.withOpacity(0.1),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppTheme.neonGreen.withOpacity(0.5),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.neonGreen.withOpacity(0.3),
+                      blurRadius: 8,
+                      spreadRadius: 0,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_circle_rounded, 
+                      color: AppTheme.neonGreen, 
+                      size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      "SYNCED TODAY",
+                      style: GoogleFonts.spaceMono(
+                        color: AppTheme.neonGreen,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ).animate().fadeIn(duration: 400.ms).scale(begin: const Offset(0.8, 0.8)),
+            ),
+        ],
+      ),
     );
   }
 
