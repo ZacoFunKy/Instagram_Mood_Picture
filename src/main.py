@@ -282,7 +282,7 @@ def get_weather_summary(manual_city: str = None) -> str:
     Fetches weather forecast for Bordeaux or manual city.
     """
     try:
-        weather = weather_client.get_bordeaux_weather(manual_city)
+        weather = weather_client.get_local_weather(manual_city)
         return weather
     except Exception as weather_error:
         logger.error(f"Weather fetch failed: {weather_error}")
@@ -523,7 +523,13 @@ def main() -> None:
 
     try:
         current_date_str = now_dt.strftime("%Y-%m-%d")
-        overrides = mongo_client.get_daily_override(current_date_str)
+        logger.info(f"Checking overrides for date: {current_date_str}")
+        try:
+            overrides = mongo_client.get_daily_override(current_date_str)
+            logger.info(f"Raw Overrides Data: {overrides}")
+        except Exception as e:
+            logger.error(f"Error calling get_daily_override: {e}")
+            overrides = {}
         
         # 1. Extract Sleep Override (Hard Data)
         manual_sleep = overrides.get("sleep_hours")

@@ -72,6 +72,7 @@ jobs:
           GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
           TARGET_CALENDAR_ID: ${{ secrets.TARGET_CALENDAR_ID }}
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGO_URI_MOBILE: ${{ secrets.MONGO_URI_MOBILE }}
           IG_USERNAME: ${{ secrets.IG_USERNAME }}
           IG_PASSWORD: ${{ secrets.IG_PASSWORD }}
           IG_TOTP_SEED: ${{ secrets.IG_TOTP_SEED }}
