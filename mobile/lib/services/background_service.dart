@@ -73,35 +73,40 @@ void callbackDispatcher() {
 Future<void> _performBackgroundSync(int steps, String? location) async {
   final collection = await DatabaseService.instance.overrides;
 
-  // We can only sync what we know. In background, we might not have access to
-  // fresh sensor data properly without a foreground service.
-  // However, we can re-push the last known state to ensure it's up to date.
-
   final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
-  final entry = MoodEntry(
-      date: dateStr,
-      sleepHours:
-          0, // We don't overwrite these zeroed values if upsert works correctly?
-      // ACTUALLY: ReplaceOne will wipe them if we aren't careful.
-      // We should probably FIND first, updates steps, then REPLACE.
-      steps: steps,
-      lastUpdated: DateTime.now(),
-      device: "android_bg_sync");
+  // Vérifier si une entrée existe déjà pour aujourd'hui
+  final existingDoc = await collection.findOne(mongo.where.eq('date', dateStr));
 
-  // Safer Background Update: Partial Update ($set)
-  // We don't want to wipe Sleep/Energy if they were set in UI.
-  // Safer Background Update: Partial Update ($set)
-  var modifier = mongo.modify
-      .set('steps', steps)
-      .set('lastUpdated', DateTime.now().toIso8601String());
+  if (existingDoc != null) {
+    // Si l'entrée existe, ne mettre à jour QUE les steps et location
+    // Ne PAS toucher aux valeurs sleep_hours, energy, stress, social
+    var modifier = mongo.modify
+        .set('steps_count', steps)
+        .set('last_updated', DateTime.now().toIso8601String())
+        .set('device', 'android_bg_sync');
 
-  if (location != null) {
-    modifier = modifier.set('location', location);
+    if (location != null) {
+      modifier = modifier.set('location', location);
+    }
+
+    await collection.update(mongo.where.eq('date', dateStr), modifier);
+    debugPrint("✅ Background Sync Complete (Update): $steps steps");
+  } else {
+    // Si aucune entrée n'existe, créer une nouvelle entrée SANS valeurs par défaut
+    // pour sleep_hours (ne pas mettre 0, laisser le backend gérer)
+    var newDoc = {
+      'date': dateStr,
+      'steps_count': steps,
+      'last_updated': DateTime.now().toIso8601String(),
+      'device': 'android_bg_sync',
+    };
+
+    if (location != null) {
+      newDoc['location'] = location;
+    }
+
+    await collection.insert(newDoc);
+    debugPrint("✅ Background Sync Complete (Insert): $steps steps");
   }
-
-  await collection.update(mongo.where.eq('date', dateStr), modifier,
-      upsert: true);
-
-  debugPrint("✅ Background Sync Complete: $steps steps");
 }

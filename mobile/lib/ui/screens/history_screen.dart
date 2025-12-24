@@ -41,7 +41,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
       debugPrint("📊 History: Found ${logs.length} entries");
 
+      // Trier explicitement par date en ordre décroissant (du plus récent au plus ancien)
       final entries = logs.map((json) => MoodEntry.fromJson(json)).toList();
+      entries.sort((a, b) => b.date.compareTo(a.date));
 
       if (mounted) {
         setState(() {
@@ -142,27 +144,52 @@ class _HistoryScreenState extends State<HistoryScreen> {
     Color moodColor = _getMoodColor(entry.moodSelected);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.08),
+            Colors.white.withOpacity(0.03),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.15), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: moodColor.withOpacity(0.1),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Left: Date Block
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(dayNum,
-                  style:
-                      AppTheme.headerLarge.copyWith(fontSize: 24, height: 1.0)),
-              Text(monthStr,
-                  style: AppTheme.subText
-                      .copyWith(fontSize: 12, fontWeight: FontWeight.bold)),
-            ],
+          // Left: Date Block with better styling
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: moodColor.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: moodColor.withOpacity(0.3)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(dayNum,
+                    style: AppTheme.headerLarge
+                        .copyWith(fontSize: 28, height: 1.0, color: moodColor)),
+                Text(monthStr,
+                    style: AppTheme.subText.copyWith(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: moodColor.withOpacity(0.8))),
+              ],
+            ),
           ),
           const SizedBox(width: 16),
 
@@ -173,62 +200,108 @@ class _HistoryScreenState extends State<HistoryScreen> {
               children: [
                 Row(
                   children: [
-                    Text(
-                        // Hide time if null/empty
-                        timeOfDay != null ? "$dayName • $timeOfDay" : dayName,
-                        style: AppTheme.subText
-                            .copyWith(fontSize: 10, letterSpacing: 0.5)),
+                    Expanded(
+                      child: Text(
+                          // Hide time if null/empty
+                          timeOfDay != null ? "$dayName • $timeOfDay" : dayName,
+                          style: AppTheme.subText.copyWith(
+                              fontSize: 11,
+                              letterSpacing: 0.5,
+                              color: Colors.white70)),
+                    ),
                     if (isSynced) ...[
                       const SizedBox(width: 6),
-                      Icon(Icons.cloud_done,
-                          color: AppTheme.neonGreen.withOpacity(0.6), size: 10)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppTheme.neonGreen.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.cloud_done,
+                                color: AppTheme.neonGreen, size: 12),
+                            const SizedBox(width: 4),
+                            Text("SYNC",
+                                style: TextStyle(
+                                    color: AppTheme.neonGreen,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      )
                     ]
                   ],
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 8),
                 if (entry.moodSelected != null)
-                  Text(
-                    entry.moodSelected!.toUpperCase(),
-                    style: TextStyle(
-                        color: moodColor,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
-                        letterSpacing: 0.5),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: moodColor.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: moodColor.withOpacity(0.4)),
+                    ),
+                    child: Text(
+                      entry.moodSelected!.toUpperCase(),
+                      style: TextStyle(
+                          color: moodColor,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 14,
+                          letterSpacing: 0.8),
+                    ),
                   )
                 else
                   Text("PROCESSING...",
                       style: AppTheme.subText.copyWith(fontSize: 14)),
+                const SizedBox(height: 12),
+                // Metrics in Row
+                Row(
+                  children: [
+                    if (entry.sleepHours > 0) ...[
+                      _miniMetric(Icons.bedtime, "${entry.sleepHours}h"),
+                      const SizedBox(width: 12),
+                    ],
+                    if (entry.steps > 0)
+                      _miniMetric(Icons.directions_walk,
+                          "${(entry.steps / 1000).toStringAsFixed(1)}k"),
+                    if (entry.location != null &&
+                        entry.location!.isNotEmpty) ...[
+                      const SizedBox(width: 12),
+                      _miniMetric(Icons.location_on, entry.location!),
+                    ],
+                  ],
+                ),
               ],
             ),
           ),
-
-          // Right: Metrics Horizontal
-          Row(
-            children: [
-              if (entry.sleepHours > 0)
-                _miniMetric(Icons.bedtime, "${entry.sleepHours}h"),
-              const SizedBox(width: 8),
-              if (entry.steps > 0)
-                _miniMetric(Icons.directions_walk,
-                    "${(entry.steps / 1000).toStringAsFixed(1)}k"),
-            ],
-          )
         ],
       ),
-    ).animate().fadeIn(delay: (50 * index).ms).slideX();
+    ).animate().fadeIn(delay: (50 * index).ms).slideY(begin: 0.3, end: 0);
   }
 
   Widget _miniMetric(IconData icon, String value) {
-    return Row(
-      children: [
-        Icon(icon, color: Colors.white54, size: 14),
-        const SizedBox(width: 4),
-        Text(value,
-            style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 12,
-                fontWeight: FontWeight.w600)),
-      ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white70, size: 14),
+          const SizedBox(width: 4),
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600)),
+        ],
+      ),
     );
   }
 
@@ -239,7 +312,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (hour < 5) return "NUIT";
     if (hour < 12) return "MATIN";
     if (hour < 18) return "APRÈS-MIDI";
-    return "SOIR";
+    if (hour < 24) return "SOIR";
+    return "NUIT";
   }
 
   Color _getMoodColor(String? mood) {

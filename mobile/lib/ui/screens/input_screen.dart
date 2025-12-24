@@ -137,6 +137,31 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   Future<void> _loadCachedInputs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final cachedDate = prefs.getString('cached_date');
+
+      // Si la date a changé (nouveau jour), réinitialiser les valeurs
+      if (cachedDate != today) {
+        debugPrint("🔄 New day detected! Resetting values to defaults.");
+        await prefs.setString('cached_date', today);
+        await prefs.remove('cached_sleep');
+        await prefs.remove('cached_energy');
+        await prefs.remove('cached_stress');
+        await prefs.remove('cached_social');
+        
+        // Réinitialiser les valeurs par défaut
+        if (mounted) {
+          setState(() {
+            _sleepHours = 7.5;
+            _energyLevel = 0.5;
+            _stressLevel = 0.5;
+            _socialLevel = 0.5;
+          });
+        }
+        return;
+      }
+
+      // Charger les valeurs en cache si même jour
       if (mounted) {
         setState(() {
           if (prefs.containsKey('cached_sleep')) {
@@ -152,7 +177,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
             _socialLevel = prefs.getDouble('cached_social') ?? 0.5;
           }
         });
-        debugPrint("💾 Loaded Cached Inputs check");
+        debugPrint("💾 Loaded Cached Inputs for $today");
       }
     } catch (e) {
       debugPrint("⚠️ Cache Load Error: $e");
@@ -232,6 +257,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
       if (!silent) {
         // Cache locally for next startup
         final prefs = await SharedPreferences.getInstance();
+        final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+        await prefs.setString('cached_date', today);
         await prefs.setDouble('cached_sleep', _sleepHours);
         await prefs.setDouble('cached_energy', _energyLevel);
         await prefs.setDouble('cached_stress', _stressLevel);
@@ -404,21 +431,44 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
       child: GlassCard(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         borderRadius: BorderRadius.circular(30),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (_cityName.isNotEmpty) ...[
-              Text(_cityName.toUpperCase(), style: AppTheme.subText),
-              const VerticalDivider(),
+        child: Container(
+          decoration: _syncSuccess
+              ? BoxDecoration(
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(
+                    color: AppTheme.neonGreen.withOpacity(0.6),
+                    width: 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.neonGreen.withOpacity(0.3),
+                      blurRadius: 12,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                )
+              : null,
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_syncSuccess) ...[
+                Icon(Icons.check_circle,
+                    color: AppTheme.neonGreen, size: 16),
+                const SizedBox(width: 8),
+              ],
+              if (_cityName.isNotEmpty) ...[
+                Text(_cityName.toUpperCase(), style: AppTheme.subText),
+                const VerticalDivider(),
+              ],
+              if (_temperature.isNotEmpty) ...[
+                Text(_temperature, style: AppTheme.subText),
+                const VerticalDivider(),
+              ],
+              Text(DateFormat('dd MMM').format(DateTime.now()).toUpperCase(),
+                  style: AppTheme.subText),
             ],
-            if (_temperature.isNotEmpty) ...[
-              // Fixed style to match City/Date (AppTheme.subText)
-              Text(_temperature, style: AppTheme.subText),
-              const VerticalDivider(),
-            ],
-            Text(DateFormat('dd MMM').format(DateTime.now()).toUpperCase(),
-                style: AppTheme.subText),
-          ],
+          ),
         ),
       ),
     );
