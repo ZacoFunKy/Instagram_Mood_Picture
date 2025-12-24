@@ -9,6 +9,7 @@ class MoodEntry {
   final DateTime? lastUpdated; // Nullable to avoid false "Now"
   final String device;
   final String? moodSelected; // For reading back predicted data
+  final String? executionType; // MATIN, APRES_MIDI, SOIREE, NUIT
 
   const MoodEntry({
     required this.date,
@@ -21,6 +22,7 @@ class MoodEntry {
     this.lastUpdated,
     required this.device,
     this.moodSelected,
+    this.executionType,
   });
 
   // Factory constructor for parsing JSON from DB
@@ -44,6 +46,7 @@ class MoodEntry {
               : null),
       device: json['device'] as String? ?? 'unknown',
       moodSelected: json['mood_selected'] as String?,
+      executionType: json['execution_type'] as String?,
     );
   }
 
@@ -70,6 +73,7 @@ class MoodEntry {
       steps: 0,
       lastUpdated: DateTime.now(), // Default to now only for fresh empty init
       device: "unknown",
+      executionType: null,
     );
   }
 
@@ -85,6 +89,7 @@ class MoodEntry {
     DateTime? lastUpdated,
     String? device,
     String? moodSelected,
+    String? executionType,
   }) {
     return MoodEntry(
       date: date ?? this.date,
@@ -97,6 +102,7 @@ class MoodEntry {
       lastUpdated: lastUpdated ?? this.lastUpdated,
       device: device ?? this.device,
       moodSelected: moodSelected ?? this.moodSelected,
+      executionType: executionType ?? this.executionType,
     );
   }
 }

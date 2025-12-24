@@ -155,7 +155,7 @@ def save_daily_log(
     calendar_summary: str,
     execution_type: str,
     dry_run: bool,
-    location: str = "Bordeaux"
+    location: str = None
 ) -> None:
     """
     Saves execution log to MongoDB.
@@ -165,7 +165,9 @@ def save_daily_log(
         mood: Predicted mood.
         music_summary: Music history summary.
         calendar_summary: Calendar events summary.
+        execution_type: Time of execution (MATIN, APRES_MIDI, SOIREE, NUIT).
         dry_run: If True, skips save.
+        location: Location override (e.g., city name). If None, no location is saved.
     """
     if dry_run:
         logger.info("Dry run: skipping database save")
@@ -175,7 +177,6 @@ def save_daily_log(
         db = mongo_client.get_database()
         logs_collection = db['daily_logs']
 
-
         entry = {
             "date": datetime.datetime.now().strftime("%Y-%m-%d"),
             "weekday": weekday,
@@ -183,10 +184,13 @@ def save_daily_log(
             "music_summary": music_summary[:200] + "..." if len(music_summary) > 200 else music_summary,
             "calendar_summary": calendar_summary[:500] if len(calendar_summary) > 500 else calendar_summary,
             "week_rhythm": "Standard", # Placeholder
-            "location": location,
             "execution_type": execution_type,
             "created_at": datetime.datetime.now().isoformat()
         }
+        
+        # Only add location if explicitly provided and not None
+        if location:
+            entry["location"] = location
 
         mongo_client.save_log(logs_collection, entry)
         logger.info("Daily log saved to MongoDB")
@@ -582,7 +586,9 @@ def main() -> None:
     logger.info(">>> STEP 4: Saving execution log...")
     
     # Determine which location was actually used
-    final_location = override_location if override_location else "Bordeaux (Default/History)"
+    # Only use override_location if it's explicitly provided and not empty
+    # Avoid "Bordeaux (Default/History)" - leave as None/empty if missing
+    final_location = override_location if (override_location and override_location.strip()) else None
     
     save_daily_log(weekday, mood, music_summary, calendar_summary, current_exec_type, args.dry_run, location=final_location)
 

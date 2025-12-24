@@ -143,7 +143,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final dayNum = DateFormat('d').format(date);
     final monthStr = DateFormat('MMM').format(date).toUpperCase();
     final dayName = DateFormat('EEEE').format(date).toUpperCase();
-    final timeOfDay = _formatTimeOfDay(entry.lastUpdated, entry.date);
+    final timeOfDay = _formatTimeOfDay(entry.executionType, entry.lastUpdated, entry.date);
 
     Color moodColor = _getMoodColor(entry.moodSelected);
 
@@ -308,17 +308,28 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  String? _formatTimeOfDay(DateTime? date, String? dateStr) {
-    // Fallback to evening of that entry's date when timestamp is absent
-    date ??= DateTime.tryParse("${dateStr ?? DateFormat('yyyy-MM-dd').format(DateTime.now())}T20:00:00");
-    if (date == null) return null;
-    date = date.toLocal();
-    int hour = date.hour;
-    if (hour < 5) return "NUIT";
-    if (hour < 12) return "MATIN";
-    if (hour < 18) return "APRÈS-MIDI";
-    if (hour < 24) return "SOIR";
-    return "NUIT";
+  String? _formatTimeOfDay(String? executionType, DateTime? date, String? dateStr) {
+    // Priorité 1 : Utiliser execution_type de la DB si disponible
+    if (executionType != null && executionType.isNotEmpty) {
+      final execType = executionType.toUpperCase();
+      if (execType.contains('MATIN')) return "MATIN";
+      if (execType.contains('APRES') || execType.contains('MIDI')) return "APRÈS-MIDI";
+      if (execType.contains('SOIREE') || execType.contains('SOIR')) return "SOIR";
+      if (execType.contains('NUIT')) return "NUIT";
+    }
+    
+    // Priorité 2 : Utiliser l'heure si disponible
+    if (date != null) {
+      date = date.toLocal();
+      int hour = date.hour;
+      if (hour < 5) return "NUIT";
+      if (hour < 12) return "MATIN";
+      if (hour < 18) return "APRÈS-MIDI";
+      if (hour < 24) return "SOIR";
+    }
+    
+    // Fallback par défaut
+    return "SOIR";
   }
 
   Color _getMoodColor(String? mood) {
