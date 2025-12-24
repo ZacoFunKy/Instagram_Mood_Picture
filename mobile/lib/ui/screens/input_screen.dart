@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -36,7 +37,8 @@ class InputScreen extends StatefulWidget {
 
 class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   // === STATE VARIABLES ===
-  double _sleepHours = 7.5;
+  TimeOfDay _sleepDuration =
+      const TimeOfDay(hour: 7, minute: 30); // Default 7h 30m
   double _energyLevel = 0.5;
   double _stressLevel = 0.5;
   double _socialLevel = 0.5;
@@ -44,7 +46,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
 
   bool _isSyncing = false;
   String _temperature = "";
-  String _cityName = "";
+  String _cityName = "Locating..."; // Restore city name
   String _weatherEmoji = "";
   int _currentSteps = 0;
   bool _manualSyncDoneToday = false;
@@ -55,7 +57,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
 
   // External Data Status
   bool _isCalendarConnected = false;
-  bool _isMusicConnected = false;
+  bool _isMusicConnected = false; // Will check checkMusicStatus
   bool _isPedometerActive = false;
 
   // Cache
@@ -72,8 +74,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _loadCachedData(); // Load first!
     _initServices();
-    _loadCachedData();
   }
 
   @override
@@ -91,17 +93,24 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
       PedometerService.instance.stepStream.listen((steps) {
         if (mounted) setState(() => _currentSteps = steps);
       });
-      setState(() => _isPedometerActive = true);
+      // Check if pedometer has valid steps
+      if (_currentSteps > 0) setState(() => _isPedometerActive = true);
 
-      // 2. Sleep
-      await _sleepTrackingService.startTracking();
-      final autoSleep = await _sleepTrackingService.getActualSleepHours();
-      if (autoSleep != null && autoSleep > 0) {
-        if (mounted) {
-          setState(() {
-            _sleepHours = autoSleep;
-            _sleepIsAutoDetected = true;
-          });
+      // 2. Sleep (Only override if not already loaded from cache/sync)
+      if (!_manualSyncDoneToday) {
+        await _sleepTrackingService.startTracking();
+        final autoSleep = await _sleepTrackingService.getActualSleepHours();
+        if (autoSleep != null && autoSleep > 0) {
+          // Convert double hours to TimeOfDay
+          int hours = autoSleep.floor();
+          int minutes = ((autoSleep - hours) * 60).round();
+
+          if (mounted) {
+            setState(() {
+              _sleepDuration = TimeOfDay(hour: hours, minute: minutes);
+              _sleepIsAutoDetected = true;
+            });
+          }
         }
       }
 
@@ -111,14 +120,15 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         if (mounted) {
           setState(() {
             _todayEvents = events;
-            _isCalendarConnected = true;
+            _isCalendarConnected = events.isNotEmpty;
           });
         }
       } catch (e) {
         debugPrint("Calendar init error: $e");
       }
 
-      // 4. Music
+      // 4. Music - Check connection specifically
+      _checkMusicConnection();
       _musicService.trackStream.listen((track) {
         if (track != null && mounted) {
           setState(() => _isMusicConnected = true);
@@ -128,8 +138,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         }
       });
 
-      // 5. Weather
-      _fetchWeather();
+      // 5. Weather & Location
+      _fetchWeatherAndLocation();
 
       // Initial Prediction
       _recalculatePrediction();
@@ -138,17 +148,39 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _fetchWeather() async {
-    // Simplified weather fetch for brevity - reusing logic from before but cleaner
-    // (In real app, move this to separate service class entirely)
+  Future<void> _checkMusicConnection() async {
+    try {
+      bool isPlaying = await _musicService.isPlaying();
+      if (mounted) setState(() => _isMusicConnected = isPlaying);
+    } catch (_) {}
+  }
+
+  Future<void> _fetchWeatherAndLocation() async {
     try {
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) return;
+        if (permission == LocationPermission.denied) {
+          if (mounted) setState(() => _cityName = "No GPS");
+          return;
+        }
       }
+
       Position pos = await Geolocator.getCurrentPosition(
           timeLimit: const Duration(seconds: 5));
+
+      // Reverse Geocoding for City Name
+      try {
+        final placemarks =
+            await placemarkFromCoordinates(pos.latitude, pos.longitude);
+        if (placemarks.isNotEmpty) {
+          if (mounted)
+            setState(() => _cityName = placemarks.first.locality ?? "Unknown");
+        }
+      } catch (e) {
+        debugPrint("Geocoding error: $e");
+      }
+
       final url = Uri.parse(
           "https://api.open-meteo.com/v1/forecast?latitude=${pos.latitude}&longitude=${pos.longitude}&current=temperature_2m,weathercode");
       final response = await http.get(url);
@@ -176,14 +208,21 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   Future<void> _loadCachedData() async {
     final prefs = await SharedPreferences.getInstance();
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    if (prefs.getString('cached_date') == today) {
+
+    // Check if we already synced today
+    if (prefs.getString('last_sync_date') == today) {
+      double cachedSleep = prefs.getDouble('cached_sleep') ?? 7.5;
+      int hours = cachedSleep.floor();
+      int minutes = ((cachedSleep - hours) * 60).round();
+
       if (mounted) {
         setState(() {
-          _sleepHours = prefs.getDouble('cached_sleep') ?? 7.5;
+          _sleepDuration = TimeOfDay(hour: hours, minute: minutes);
           _energyLevel = prefs.getDouble('cached_energy') ?? 0.5;
           _stressLevel = prefs.getDouble('cached_stress') ?? 0.5;
           _socialLevel = prefs.getDouble('cached_social') ?? 0.5;
-          _manualSyncDoneToday = true;
+          _manualSyncDoneToday = true; // Use this to lock init
+          _cityName = prefs.getString('cached_location') ?? "Stored Loc";
         });
       }
     }
@@ -199,9 +238,10 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   }
 
   void _recalculatePrediction() {
+    double sleepHours = _sleepDuration.hour + (_sleepDuration.minute / 60.0);
     final mood = MoodLogic.analyze(
       calendarEvents: _todayEvents,
-      sleepHours: _sleepHours,
+      sleepHours: sleepHours,
       weather: _weatherEmoji,
       energyLevel: _energyLevel,
       stressLevel: _stressLevel,
@@ -217,15 +257,18 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     setState(() => _isSyncing = true);
     try {
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      double sleepHours = _sleepDuration.hour + (_sleepDuration.minute / 60.0);
+
       final entry = MoodEntry(
         date: today,
-        sleepHours: _sleepHours,
+        sleepHours: sleepHours,
         energy: _energyLevel,
         stress: _stressLevel,
         social: _socialLevel,
         steps: _currentSteps,
         lastUpdated: DateTime.now(),
         device: "android_app_v2",
+        location: _cityName, // Add Location
         // Additional fields...
       );
 
@@ -234,11 +277,12 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
           upsert: true);
 
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('cached_date', today);
-      await prefs.setDouble('cached_sleep', _sleepHours);
+      await prefs.setString('last_sync_date', today); // Correct Key
+      await prefs.setDouble('cached_sleep', sleepHours);
       await prefs.setDouble('cached_energy', _energyLevel);
       await prefs.setDouble('cached_stress', _stressLevel);
       await prefs.setDouble('cached_social', _socialLevel);
+      await prefs.setString('cached_location', _cityName); // Cache Location
 
       if (mounted) {
         setState(() {
@@ -319,11 +363,21 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
+      children: [
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text("DAILY DATA",
                 style: AppTheme.headerLarge.copyWith(fontSize: 28)),
+            Row(
+              children: [
+                 Icon(Icons.location_on, size: 14, color: Colors.white54),
+                 const SizedBox(width: 4),
+                 Text(_cityName.toUpperCase(), // Display City
+                    style: AppTheme.subText.copyWith(color: AppTheme.neonCyan)),
+              ],
+            ),
+             const SizedBox(height: 4),
             Text(DateFormat('EEEE, d MMM').format(DateTime.now()).toUpperCase(),
                 style: AppTheme.subText),
           ],
@@ -352,9 +406,20 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
+      children: [
         _buildStatusChip(Icons.calendar_today, "Events", _isCalendarConnected),
         _buildStatusChip(Icons.music_note, "Music", _isMusicConnected),
-        _buildStatusChip(Icons.directions_walk, "Steps", _isPedometerActive),
+        GestureDetector(
+             onTap: () {
+                 showDialog(context: context, builder: (ctx) => AlertDialog(
+                     backgroundColor: Colors.black,
+                     title: const Text("Pedometer Stats", style: TextStyle(color: Colors.white)),
+                     content: Text("Steps today: $_currentSteps", style: const TextStyle(color: AppTheme.neonGreen, fontSize: 24)),
+                     actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK"))],
+                 ));
+             },
+             child: _buildStatusChip(Icons.directions_walk, "Steps", _isPedometerActive)
+        ),
       ],
     );
   }
@@ -418,100 +483,64 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
           ],
         ),
         const SizedBox(height: 16),
+        const SizedBox(height: 16),
         Center(
           child: GestureDetector(
-            onTap: _showSleepInputDialog,
+            onTap: _pickSleepTime, // Use Time Picker
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               decoration: BoxDecoration(
-                  border: Border.all(color: Colors.white24),
-                  borderRadius: BorderRadius.circular(12)),
+                  border: Border.all(color: AppTheme.neonPurple.withOpacity(0.5)),
+                  color: AppTheme.neonPurple.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16)),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
                 children: [
-                  Text(_sleepHours.toStringAsFixed(1),
+                  Text("${_sleepDuration.hour}h ${_sleepDuration.minute.toString().padLeft(2, '0')}m",
                       style: GoogleFonts.spaceMono(
-                          fontSize: 42,
+                          fontSize: 32,
                           fontWeight: FontWeight.bold,
                           color: Colors.white)),
-                  const SizedBox(width: 4),
-                  Text("h",
-                      style: TextStyle(color: Colors.white54, fontSize: 20)),
+                   const SizedBox(width: 8),
+                   Icon(Icons.edit, size: 16, color: Colors.white54)
                 ],
               ),
             ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            activeTrackColor: AppTheme.neonPurple,
-            inactiveTrackColor: Colors.white10,
-            thumbColor: Colors.white,
-            overlayColor: AppTheme.neonPurple.withOpacity(0.2),
-            trackHeight: 6,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
-          ),
-          child: Slider(
-            value: _sleepHours,
-            min: 0,
-            max: 12,
-            divisions: 24, // 0.5 steps
-            onChanged: (val) {
-              setState(() {
-                _sleepHours = val;
-                _sleepIsAutoDetected = false;
-              });
-              _onInputChanged();
-            },
           ),
         ),
       ],
     );
   }
 
-  void _showSleepInputDialog() {
-    final controller = TextEditingController(text: _sleepHours.toString());
-    showDialog(
+  Future<void> _pickSleepTime() async {
+       final TimeOfDay? picked = await showTimePicker(
         context: context,
-        builder: (context) => AlertDialog(
-              backgroundColor: const Color(0xFF1E1E1E),
-              title: const Text("Enter Sleep Hours",
-                  style: TextStyle(color: Colors.white)),
-              content: TextField(
-                controller: controller,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.white24)),
-                  focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: AppTheme.neonPurple)),
-                ),
+        initialTime: _sleepDuration,
+        builder: (BuildContext context, Widget? child) {
+          return Theme(
+            data: ThemeData.dark().copyWith(
+              colorScheme: const ColorScheme.dark(
+                primary: AppTheme.neonPurple,
+                onPrimary: Colors.white,
+                surface: Color(0xFF1E1E1E),
+                onSurface: Colors.white,
               ),
-              actions: [
-                TextButton(
-                    child: const Text("Cancel"),
-                    onPressed: () => Navigator.pop(context)),
-                TextButton(
-                    child: const Text("Set",
-                        style: TextStyle(color: AppTheme.neonPurple)),
-                    onPressed: () {
-                      final val = double.tryParse(controller.text);
-                      if (val != null && val >= 0 && val <= 24) {
-                        setState(() {
-                          _sleepHours = val;
-                          _sleepIsAutoDetected = false;
-                        });
-                        _onInputChanged();
-                      }
-                      Navigator.pop(context);
-                    }),
-              ],
-            ));
+              dialogBackgroundColor: Colors.black,
+            ),
+            child: child!,
+          );
+        },
+      );
+      
+      if (picked != null && picked != _sleepDuration) {
+          setState(() {
+              _sleepDuration = picked;
+              _sleepIsAutoDetected = false;
+          });
+          _onInputChanged();
+      }
   }
 
   // === METRICS SECTION ===

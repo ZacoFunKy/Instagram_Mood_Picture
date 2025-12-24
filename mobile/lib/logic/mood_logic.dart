@@ -340,12 +340,14 @@ class MoodLogic {
     }
 
     // 6. TIME ANALYSIS
-    final hour = DateTime.now().hour;
     final weekday = DateTime.now().weekday;
     if (weekday == DateTime.monday) {
-      addScore(MoodCategory.energetic, SignalStrength.moderate);
+      addScore(MoodCategory.energetic, SignalStrength.strong);
+      addScore(MoodCategory.pumped, SignalStrength.moderate);
     } else if (weekday == DateTime.friday) {
       addScore(MoodCategory.tired, SignalStrength.moderate);
+      addScore(MoodCategory.chill, SignalStrength.strong);
+    } else if (weekday == DateTime.saturday || weekday == DateTime.sunday) {
       addScore(MoodCategory.chill, SignalStrength.strong);
     }
 
