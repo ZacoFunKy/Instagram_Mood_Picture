@@ -171,9 +171,13 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         return;
       }
 
-      // Fallback to playing check
-      bool isPlaying = await _musicService.isPlaying();
-      if (mounted) setState(() => _isMusicConnected = isPlaying);
+      // Fallback to playing check, and also consider if we have any enriched tracks (sticky status)
+      final isPlaying = await _musicService.isPlaying();
+      if (mounted) {
+        setState(() {
+          _isMusicConnected = isPlaying || _recentEnrichedTracks.isNotEmpty;
+        });
+      }
     } catch (_) {}
   }
 
@@ -227,15 +231,6 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         }
       }
     } catch (_) {}
-  }
-
-  Future<void> _checkMusicConnection() async {
-    final isPlaying = await _musicService.isPlaying();
-    if (mounted) {
-      setState(() {
-        _isMusicConnected = isPlaying || _recentEnrichedTracks.isNotEmpty;
-      });
-    }
   }
 
   // === MUSIC ENRICHMENT HELPER ===
