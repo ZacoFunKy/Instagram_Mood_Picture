@@ -123,27 +123,6 @@ class GoogleCalendarService {
         print('✅ Loaded ${allEvents.length} events from Google Calendar(s)');
       }
       return allEvents;
-
-      if (events.items == null || events.items!.isEmpty) {
-        print('📅 No events today');
-        return [];
-      }
-
-      final result = events.items!.map((event) {
-        final start = event.start?.dateTime ?? event.start?.date;
-        return {
-          'summary': event.summary ?? 'No title',
-          'start': {
-            'dateTime':
-                start?.toIso8601String() ?? DateTime.now().toIso8601String(),
-          },
-          'description': event.description ?? '',
-          'location': event.location ?? '',
-        };
-      }).toList();
-
-      print('✅ Loaded ${result.length} events from Google Calendar');
-      return result;
     } catch (e) {
       print('⚠️ Google Calendar fetch error: $e');
       return [];
