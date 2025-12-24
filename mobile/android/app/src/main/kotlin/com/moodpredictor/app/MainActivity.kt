@@ -91,8 +91,14 @@ class MainActivity: FlutterActivity() {
             val metadata = controller.metadata ?: continue
             val packageName = controller.packageName ?: ""
             
-            // Prioritize YouTube Music, but accept any media
-            if (packageName.contains("youtube.music") || activeSessions.size == 1) {
+            // User Request: IGNORE Standard YouTube (keep only YT Music & Metrolist)
+            if (packageName == "com.google.android.youtube") continue
+
+            // Prioritize YouTube Music & Metrolist, but accept any media if it's the only one
+            if (packageName.contains("youtube.music") || 
+                packageName.contains("metrolist") || 
+                packageName.contains("metro") || // Covers "Metro" player variants
+                activeSessions.size == 1) {
                 return mapOf(
                     "title" to (metadata.getString(MediaMetadata.METADATA_KEY_TITLE) ?: ""),
                     "artist" to (metadata.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: ""),

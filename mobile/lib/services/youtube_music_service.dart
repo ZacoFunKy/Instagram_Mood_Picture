@@ -124,4 +124,25 @@ class YouTubeMusicService {
       debugPrint("Error loading music history: $e");
     }
   }
+
+  /// Check if Notification Listener permission is granted
+  Future<bool> isNotificationPermissionGranted() async {
+    try {
+      final result =
+          await _channel.invokeMethod('isNotificationListenerEnabled');
+      return result ?? false;
+    } catch (e) {
+      debugPrint('⚠️ YouTubeMusicService permission check error: $e');
+      return false;
+    }
+  }
+
+  /// Open Notification Listener Settings to allow user to grant permission
+  Future<void> requestNotificationPermission() async {
+    try {
+      await _channel.invokeMethod('openNotificationListenerSettings');
+    } catch (e) {
+      debugPrint('⚠️ YouTubeMusicService open settings error: $e');
+    }
+  }
 }
