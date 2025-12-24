@@ -137,9 +137,14 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
       _processMusicHistory(_musicService.getRecentTracks());
 
       // Check Permission for Music Listener
+      final prefs = await SharedPreferences.getInstance();
+      final bool suppressed =
+          prefs.getBool('music_permission_suppressed') ?? false;
+
       final musicPermGranted =
           await _musicService.isNotificationPermissionGranted();
-      if (!musicPermGranted && mounted) {
+
+      if (!musicPermGranted && !suppressed && mounted) {
         // Delay slightly to let UI settle, then show dialog
         Future.delayed(const Duration(seconds: 1), _showMusicPermissionDialog);
       }
@@ -539,18 +544,25 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
                         _musicService.requestNotificationPermission();
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.neonPurple.withOpacity(0.2),
-                        foregroundColor: AppTheme.neonPurple,
+                        backgroundColor: AppTheme.neonBlue.withOpacity(0.2),
+                        foregroundColor: AppTheme.neonBlue,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
-                        elevation: 0,
-                        side: BorderSide(
-                            color: AppTheme.neonPurple.withOpacity(0.5)),
                       ),
                       child: const Text("ENABLE ACCESS",
                           style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setBool('music_permission_suppressed', true);
+                    },
+                    child: Text("Don't ask again",
+                        style: TextStyle(color: Colors.white.withOpacity(0.5))),
                   ),
                   const SizedBox(height: 12),
                   TextButton(
@@ -673,40 +685,70 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _buildStatusChip(Icons.calendar_today, "Events", _isCalendarConnected),
-        _buildStatusChip(Icons.music_note, "Music", _isMusicConnected),
-        GestureDetector(
-            onTap: _showStepsDialog,
-            child: _buildStatusChip(
-                Icons.directions_walk, "Steps", _isPedometerActive)),
+        _buildStatusChip(
+          Icons.calendar_today,
+          "Events",
+          _isCalendarConnected,
+          onTap: () async {
+            if (!_isCalendarConnected) {
+              final success = await _calendarService.signIn();
+              if (mounted) setState(() => _isCalendarConnected = success);
+            }
+          },
+        ),
+        _buildStatusChip(
+          Icons.music_note,
+          "Music",
+          _isMusicConnected,
+          onTap: () {
+            if (!_isMusicConnected) {
+              _musicService.requestNotificationPermission();
+              // Clear suppression to allow re-asking
+              SharedPreferences.getInstance().then((prefs) {
+                prefs.remove('music_permission_suppressed');
+                _checkMusicConnection();
+              });
+            }
+          },
+        ),
+        _buildStatusChip(
+          Icons.directions_walk,
+          "Steps",
+          _isPedometerActive,
+          onTap: _showStepsDialog,
+        ),
       ],
     );
   }
 
-  Widget _buildStatusChip(IconData icon, String label, bool isActive) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: isActive
-            ? AppTheme.neonGreen.withOpacity(0.1)
-            : Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-            color: isActive
-                ? AppTheme.neonGreen.withOpacity(0.5)
-                : Colors.white.withOpacity(0.1)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon,
-              size: 14, color: isActive ? AppTheme.neonGreen : Colors.grey),
-          const SizedBox(width: 6),
-          Text(label,
-              style: TextStyle(
-                  color: isActive ? AppTheme.neonGreen : Colors.grey,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold))
-        ],
+  Widget _buildStatusChip(IconData icon, String label, bool isActive,
+      {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive
+              ? AppTheme.neonGreen.withOpacity(0.1)
+              : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: isActive
+                  ? AppTheme.neonGreen.withOpacity(0.5)
+                  : Colors.white.withOpacity(0.1)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon,
+                size: 14, color: isActive ? AppTheme.neonGreen : Colors.grey),
+            const SizedBox(width: 6),
+            Text(label,
+                style: TextStyle(
+                    color: isActive ? AppTheme.neonGreen : Colors.grey,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold))
+          ],
+        ),
       ),
     );
   }
