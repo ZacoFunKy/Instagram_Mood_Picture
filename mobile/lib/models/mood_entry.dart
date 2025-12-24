@@ -25,6 +25,9 @@ class MoodEntry {
 
   // Factory constructor for parsing JSON from DB
   factory MoodEntry.fromJson(Map<String, dynamic> json) {
+    // Some collections may store city under a different key
+    final resolvedLocation = (json['location'] ?? json['city']) as String?;
+
     return MoodEntry(
       date: json['date'] as String,
       sleepHours: (json['sleep_hours'] as num?)?.toDouble() ?? 0.0,
@@ -32,7 +35,7 @@ class MoodEntry {
       stress: (json['feedback_stress'] as num?)?.toDouble(), // Nullable
       social: (json['feedback_social'] as num?)?.toDouble(), // Nullable
       steps: (json['steps_count'] as num?)?.toInt() ?? 0,
-      location: json['location'] as String?,
+      location: resolvedLocation,
       // Prioritize created_at, then last_updated, then NULL (no default Now)
       lastUpdated: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'] as String)

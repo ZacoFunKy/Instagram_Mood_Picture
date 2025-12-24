@@ -113,14 +113,20 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   Future<void> _loadCachedLocation() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final city = prefs.getString('cached_city');
-      final temp = prefs.getString('cached_temp');
-      if (city != null && mounted) {
+      final cachedCity = prefs.getString('cached_city');
+      final cachedTemp = prefs.getString('cached_temp');
+      final cachedCityDate = prefs.getString('cached_city_date');
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+      // N'utiliser le cache que s'il date d'aujourd'hui
+      if (cachedCity != null && cachedCityDate == today && mounted) {
         setState(() {
-          _cityName = city;
-          if (temp != null) _temperature = temp;
+          _cityName = cachedCity;
+          if (cachedTemp != null) _temperature = cachedTemp;
         });
-        debugPrint("📍 Loaded Cached Location: $city");
+        debugPrint("📍 Loaded Cached Location: $cachedCity (today)");
+      } else {
+        debugPrint("ℹ️ Cached location is stale or missing; will refetch.");
       }
     } catch (_) {}
   }
@@ -230,15 +236,29 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
       final collection = await DatabaseService.instance.overrides
           .timeout(const Duration(seconds: 30));
 
-      // 2. Prepare Data Model
+      // 2. Préparer les données avec une ville toujours fournie si possible
+      //    - priorité à la ville du jour
+      //    - sinon, fallback sur la dernière ville connue (même si la date ne correspond pas)
+      final prefs = await SharedPreferences.getInstance();
+      final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final cachedCityDate = prefs.getString('cached_city_date');
+      final cachedCity = prefs.getString('cached_city');
+      String? locationToUse;
+
+      if (_cityName.isNotEmpty && cachedCityDate == today) {
+        locationToUse = _cityName; // Ville fraîche du jour
+      } else if (cachedCity != null && cachedCity.isNotEmpty) {
+        locationToUse = cachedCity; // Fallback : dernière ville connue
+      }
+
       final entry = MoodEntry(
-        date: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+        date: today,
         sleepHours: _sleepHours,
         energy: _energyLevel,
         stress: _stressLevel,
         social: _socialLevel,
         steps: _currentSteps,
-        location: _cityName.isNotEmpty ? _cityName : null,
+        location: locationToUse,
         lastUpdated: DateTime.now(),
         device: "android_app_mood_v2",
       );
@@ -256,8 +276,6 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
 
       if (!silent) {
         // Cache locally for next startup
-        final prefs = await SharedPreferences.getInstance();
-        final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
         await prefs.setString('cached_date', today);
         await prefs.setDouble('cached_sleep', _sleepHours);
         await prefs.setDouble('cached_energy', _energyLevel);
@@ -336,6 +354,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
           setState(() {
+            _cityName = ""; // Ne pas réutiliser une vieille ville
             _temperature = "-";
             _weatherLoading = false;
           });
@@ -354,7 +373,10 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         if (placemarks.isNotEmpty) {
           setState(() => _cityName = placemarks.first.locality ?? "Unknown");
         }
-      } catch (_) {}
+      } catch (_) {
+        // Si géocodage échoue, ne pas conserver une ville obsolète
+        if (mounted) setState(() => _cityName = "");
+      }
 
       // API
       final url = Uri.parse(
@@ -374,11 +396,15 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         final prefs = await SharedPreferences.getInstance();
         if (_cityName.isNotEmpty) {
           await prefs.setString('cached_city', _cityName);
+          await prefs.setString('cached_city_date',
+              DateFormat('yyyy-MM-dd').format(DateTime.now()));
         }
         await prefs.setString('cached_temp', _temperature);
       }
     } catch (e) {
       debugPrint("Weather Error: $e");
+      // En cas d'erreur réseau ou autre, ne pas conserver une ville potentiellement fausse
+      if (mounted) setState(() => _cityName = "");
     } finally {
       if (mounted) setState(() => _weatherLoading = false);
     }

@@ -41,9 +41,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
       debugPrint("📊 History: Found ${logs.length} entries");
 
-      // Trier explicitement par date en ordre décroissant (du plus récent au plus ancien)
+      // Trier explicitement par date/heure en ordre décroissant (plus récent en premier)
       final entries = logs.map((json) => MoodEntry.fromJson(json)).toList();
-      entries.sort((a, b) => b.date.compareTo(a.date));
+      entries.sort((a, b) {
+        final tsA = a.lastUpdated ?? DateTime.tryParse("${a.date}T00:00:00") ?? DateTime(1970);
+        final tsB = b.lastUpdated ?? DateTime.tryParse("${b.date}T00:00:00") ?? DateTime(1970);
+        return tsB.compareTo(tsA);
+      });
 
       if (mounted) {
         setState(() {
@@ -139,7 +143,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final dayNum = DateFormat('d').format(date);
     final monthStr = DateFormat('MMM').format(date).toUpperCase();
     final dayName = DateFormat('EEEE').format(date).toUpperCase();
-    final timeOfDay = _formatTimeOfDay(entry.lastUpdated);
+    final timeOfDay = _formatTimeOfDay(entry.lastUpdated, entry.date);
 
     Color moodColor = _getMoodColor(entry.moodSelected);
 
@@ -304,7 +308,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  String? _formatTimeOfDay(DateTime? date) {
+  String? _formatTimeOfDay(DateTime? date, String? dateStr) {
+    // Fallback to evening of that entry's date when timestamp is absent
+    date ??= DateTime.tryParse("${dateStr ?? DateFormat('yyyy-MM-dd').format(DateTime.now())}T20:00:00");
     if (date == null) return null;
     date = date.toLocal();
     int hour = date.hour;
