@@ -46,11 +46,20 @@ jobs:
           fi
 
       - name: Create .env config
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGO_URI_MOBILE: ${{ secrets.MONGO_URI_MOBILE }}
+          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+          GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+          TARGET_CALENDAR_ID: ${{ secrets.TARGET_CALENDAR_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           # MongoDB URIs
-          URI="${{ secrets.MONGO_URI }}"
+          URI="$MONGO_URI"
           if [ -z "$URI" ]; then
-            URI="${{ secrets.MONGODB_URI }}"
+            URI="$MONGODB_URI"
           fi
           
           if [ -z "$URI" ]; then
@@ -61,7 +70,7 @@ jobs:
           echo "MONGO_URI=$URI" > .env
           
           # Mobile MongoDB URI
-          URI_MOBILE="${{ secrets.MONGO_URI_MOBILE }}"
+          URI_MOBILE="$MONGO_URI_MOBILE"
           if [ -z "$URI_MOBILE" ]; then
              echo "⚠️ WARNING: MONGO_URI_MOBILE not found. Sync might fail."
           else
@@ -71,9 +80,6 @@ jobs:
           echo "COLLECTION_NAME=overrides" >> .env
           
           # Spotify credentials (for music enrichment)
-          SPOTIFY_CLIENT_ID="${{ secrets.SPOTIFY_CLIENT_ID }}"
-          SPOTIFY_CLIENT_SECRET="${{ secrets.SPOTIFY_CLIENT_SECRET }}"
-          
           if [ -z "$SPOTIFY_CLIENT_ID" ] || [ -z "$SPOTIFY_CLIENT_SECRET" ]; then
              echo "⚠️ WARNING: Spotify credentials not found. Music enrichment will fail."
           else
@@ -83,16 +89,16 @@ jobs:
           fi
           
           # Google Service Account (for Calendar API)
-          GOOGLE_SERVICE_ACCOUNT="${{ secrets.GOOGLE_SERVICE_ACCOUNT }}"
           if [ -z "$GOOGLE_SERVICE_ACCOUNT" ]; then
              echo "⚠️ WARNING: GOOGLE_SERVICE_ACCOUNT not found. Calendar sync will fail."
           else
+             # Use single quotes for potential JSON content to avoid shell interpretation issues
+             # Write strictly to file without echo expansion risks if possible, but safe echo is acceptable
              echo "GOOGLE_SERVICE_ACCOUNT='$GOOGLE_SERVICE_ACCOUNT'" >> .env
              echo "✅ Google Service Account added"
           fi
           
           # Google Calendar ID
-          TARGET_CALENDAR_ID="${{ secrets.TARGET_CALENDAR_ID }}"
           if [ -z "$TARGET_CALENDAR_ID" ]; then
              echo "⚠️ WARNING: TARGET_CALENDAR_ID not found. Using 'primary' as default."
              echo "TARGET_CALENDAR_ID=primary" >> .env
@@ -102,7 +108,6 @@ jobs:
           fi
           
           # Gemini API Key (for AI analysis)
-          GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}"
           if [ -z "$GEMINI_API_KEY" ]; then
              echo "⚠️ WARNING: GEMINI_API_KEY not found. AI features may be limited."
           else
