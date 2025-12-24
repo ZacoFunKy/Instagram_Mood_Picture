@@ -42,6 +42,14 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   String? _lastLoadedDate;
   bool _manualSyncDoneToday = false;
 
+  // Backend analyzer context
+  String? _backendAlgoPrediction;
+  Map<String, dynamic>? _backendMusicMetrics;
+  String? _backendCalendarSummary;
+  String? _backendWeatherSummary;
+
+  String _weatherEmoji = ""; // Weather emoji (☀️🌧️⛈️❄️)
+
   // Stream Subscription
   StreamSubscription<int>? _stepSubscription;
   int _currentSteps = 0;
@@ -56,6 +64,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     _fetchWeather(); // Background Refresh
     _checkTodayData(); // Check persistence
     _checkManualSyncStatus(); // Check if manual sync done today
+    _loadBackendPrediction(); // Load backend analyzer context
   }
 
   /// Check if manual sync was performed today
@@ -80,6 +89,37 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
       }
     } catch (e) {
       debugPrint("⚠️ Manual sync status check error: $e");
+    }
+  }
+
+  /// Load backend prediction data (calendar, music, weather) from daily_logs
+  Future<void> _loadBackendPrediction() async {
+    try {
+      final collection = await DatabaseService.instance.dailyLogs;
+      final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final doc = await collection
+          .findOne(mongo.where.eq('date', dateStr).sortBy('last_updated', descending: true))
+          .timeout(const Duration(seconds: 8));
+
+      if (doc != null && mounted) {
+        setState(() {
+          _backendAlgoPrediction = doc['algo_prediction'] as String?;
+          _backendMusicMetrics = (doc['music_metrics'] as Map?)?.cast<String, dynamic>();
+          _backendCalendarSummary = doc['calendar_summary'] as String?;
+          _backendWeatherSummary = doc['weather_summary'] as String?;
+        });
+        
+        // Log loaded data for debugging
+        debugPrint("✅ Backend analyzer context loaded:");
+        debugPrint("   - Music: ${_backendMusicMetrics != null ? 'Available' : 'Missing'}");
+        debugPrint("   - Calendar: ${_backendCalendarSummary != null ? 'Available' : 'Missing'}");
+        debugPrint("   - Weather: ${_backendWeatherSummary != null ? 'Available' : 'Missing'}");
+        debugPrint("   - Algo prediction: $_backendAlgoPrediction");
+      } else {
+        debugPrint("ℹ️ No backend data found for today (first run?)");
+      }
+    } catch (e) {
+      debugPrint("⚠️ Backend prediction fetch failed: $e");
     }
   }
 
@@ -491,22 +531,46 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _buildHeader(),
-            const SizedBox(height: 40),
-            _buildSleepSlider(),
-            const SizedBox(height: 40),
-            Text("VITAL METRICS", style: AppTheme.labelSmall),
-            const SizedBox(height: 20),
-            _buildMetrics(),
-            const SizedBox(height: 24),
-            _buildStepCounter(),
-            const SizedBox(height: 40),
+            const SizedBox(height: 16),
+            // Sleep + Metrics + Steps in compact grid
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Left: Sleep Selector (Compact)
+                Flexible(
+                  flex: 2,
+                  child: _buildCompactSleepSelector(),
+                ),
+                const SizedBox(width: 12),
+                // Right: Metrics Stack
+                Flexible(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildCompactMetrics(),
+                      const SizedBox(height: 12),
+                      _buildStepCounter(),
+                      const SizedBox(height: 12),
+                      _buildSleepQualityBadge(),
+                      const SizedBox(height: 12),
+                      _buildDataConfidenceScore(),
+                    ],
+                  ),
+                ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildLivePredictionPreview(),
+            const SizedBox(height: 16),
             _buildSyncButton(),
-            const SizedBox(height: 100),
+            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -514,95 +578,241 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildHeader() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          GlassCard(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            borderRadius: BorderRadius.circular(30),
-            child: Container(
-              decoration: _syncSuccess
-                  ? BoxDecoration(
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(
-                        color: AppTheme.neonGreen.withOpacity(0.6),
-                        width: 2,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GlassCard(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          borderRadius: BorderRadius.circular(24),
+          child: Container(
+            decoration: _syncSuccess
+                ? BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: AppTheme.neonGreen.withOpacity(0.6),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.neonGreen.withOpacity(0.2),
+                        blurRadius: 8,
+                        spreadRadius: 1,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.neonGreen.withOpacity(0.3),
-                          blurRadius: 12,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    )
-                  : null,
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    ],
+                  )
+                : null,
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_syncSuccess) ...[
+                  Icon(Icons.check_circle,
+                      color: AppTheme.neonGreen, size: 14),
+                  const SizedBox(width: 6),
+                ],
+                if (_cityName.isNotEmpty) ...[
+                  Text(_cityName.toUpperCase(), style: AppTheme.subText.copyWith(fontSize: 11)),
+                  const VerticalDivider(),
+                ],
+                if (_temperature.isNotEmpty) ...[
+                  Text(_temperature, style: AppTheme.subText.copyWith(fontSize: 11)),
+                  const VerticalDivider(),
+                ],
+                Text(DateFormat('dd MMM').format(DateTime.now()).toUpperCase(),
+                    style: AppTheme.subText.copyWith(fontSize: 11)),
+              ],
+            ),
+          ),
+        ),
+        // Manual sync indicator - persistent throughout the day
+        if (_manualSyncDoneToday)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.neonGreen.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: AppTheme.neonGreen.withOpacity(0.4),
+                  width: 1,
+                ),
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (_syncSuccess) ...[
-                    Icon(Icons.check_circle,
-                        color: AppTheme.neonGreen, size: 16),
-                    const SizedBox(width: 8),
-                  ],
-                  if (_cityName.isNotEmpty) ...[
-                    Text(_cityName.toUpperCase(), style: AppTheme.subText),
-                    const VerticalDivider(),
-                  ],
-                  if (_temperature.isNotEmpty) ...[
-                    Text(_temperature, style: AppTheme.subText),
-                    const VerticalDivider(),
-                  ],
-                  Text(DateFormat('dd MMM').format(DateTime.now()).toUpperCase(),
-                      style: AppTheme.subText),
+                  Icon(Icons.check_circle, 
+                    color: AppTheme.neonGreen, 
+                    size: 14),
+                  const SizedBox(width: 6),
+                  Text(
+                    "MANUAL SYNC DONE TODAY",
+                    style: AppTheme.labelSmall.copyWith(
+                      color: AppTheme.neonGreen,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ).animate().fadeIn().slideY(begin: -0.8),
+          ),
+      ],
+    );
+  }
+
+  // Compact sleep selector for no-scroll layout
+  Widget _buildCompactSleepSelector() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.neonPurple.withOpacity(0.15),
+            AppTheme.neonPurple.withOpacity(0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3), width: 1),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text("SLEEP", style: AppTheme.labelSmall.copyWith(fontSize: 11)),
+          const SizedBox(height: 12),
+          // Display with tap to edit
+          InkWell(
+            onTap: () => _pickSleepTimeManual(),
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.neonPurple.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    _formatSleep(_sleepHours),
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.neonPurple,
+                    ),
+                  ),
+                  Text("tap to edit", style: AppTheme.labelSmall.copyWith(fontSize: 9, color: Colors.white54)),
                 ],
               ),
             ),
           ),
-          // Manual sync indicator - persistent throughout the day
-          if (_manualSyncDoneToday)
-            Padding(
-              padding: const EdgeInsets.only(top: 16),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppTheme.neonGreen.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppTheme.neonGreen.withOpacity(0.5),
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.neonGreen.withOpacity(0.2),
-                      blurRadius: 12,
-                      spreadRadius: 1,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.check_circle, 
-                      color: AppTheme.neonGreen, 
-                      size: 16),
-                    const SizedBox(width: 8),
-                    Text(
-                      "MANUAL SYNC DONE TODAY",
-                      style: AppTheme.labelSmall.copyWith(
-                        color: AppTheme.neonGreen,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ).animate().fadeIn().slideY(begin: -0.8),
+          const SizedBox(height: 12),
+          // Compact slider
+          SliderTheme(
+            data: SliderThemeData(
+              trackHeight: 6,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
             ),
+            child: Slider(
+              value: _sleepHours,
+              min: 0,
+              max: 12,
+              activeColor: AppTheme.neonPurple,
+              inactiveColor: Colors.white10,
+              onChanged: (value) {
+                double snapped = (value * 4).round() / 4;
+                if (snapped != _sleepHours) {
+                  HapticFeedback.selectionClick();
+                  setState(() => _sleepHours = snapped);
+                }
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text("0h", style: AppTheme.subText.copyWith(fontSize: 10)),
+                Text("6h", style: AppTheme.subText.copyWith(fontSize: 10)),
+                Text("12h", style: AppTheme.subText.copyWith(fontSize: 10)),
+              ],
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  // Compact metrics for no-scroll layout
+  Widget _buildCompactMetrics() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.06),
+            Colors.white.withOpacity(0.02),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("VITAL METRICS", style: AppTheme.labelSmall.copyWith(fontSize: 11)),
+          const SizedBox(height: 12),
+          _buildCompactMetricBar("ENERGY", "⚡", _energyLevel, AppTheme.neonGreen,
+              (v) => setState(() => _energyLevel = v)),
+          const SizedBox(height: 10),
+          _buildCompactMetricBar("STRESS", "🧠", _stressLevel, AppTheme.neonPink,
+              (v) => setState(() => _stressLevel = v)),
+          const SizedBox(height: 10),
+          _buildCompactMetricBar("SOCIAL", "💬", _socialLevel, AppTheme.neonBlue,
+              (v) => setState(() => _socialLevel = v)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactMetricBar(String label, String emoji, double val, Color color,
+      Function(double) change) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text("$emoji $label", style: AppTheme.labelSmall.copyWith(fontSize: 12)),
+            Text("${(val * 100).toInt()}%", style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: SliderTheme(
+            data: SliderThemeData(
+              trackHeight: 8,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+            ),
+            child: Slider(
+              value: val,
+              min: 0,
+              max: 1,
+              activeColor: color,
+              inactiveColor: color.withOpacity(0.2),
+              onChanged: change,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -738,7 +948,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     bool goalMet = _currentSteps >= 10000;
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -748,83 +958,400 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
             Colors.white.withOpacity(0.03),
           ],
         ),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: goalMet ? AppTheme.neonGreen.withOpacity(0.4) : Colors.white.withOpacity(0.15),
-          width: 1.5,
+          width: 1,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: goalMet ? AppTheme.neonGreen.withOpacity(0.15) : Colors.transparent,
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
-        ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppTheme.neonGreen.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppTheme.neonGreen.withOpacity(0.4)),
-                ),
-                child: const Text("👟", style: TextStyle(fontSize: 24)),
-              ),
-              const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Row(
                 children: [
-                  Text("STEPS TODAY", style: AppTheme.labelSmall),
-                  const SizedBox(height: 4),
-                  Text(
-                    NumberFormat('#,###').format(_currentSteps),
-                    style: AppTheme.valueLarge,
+                  Icon(
+                    Icons.directions_walk,
+                    color: goalMet ? AppTheme.neonGreen : Colors.orange,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("STEPS", style: AppTheme.labelSmall.copyWith(fontSize: 10)),
+                      Text(
+                        NumberFormat('#,###').format(_currentSteps),
+                        style: GoogleFonts.spaceMono(fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+                    ],
                   ),
                 ],
               ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: goalMet ? AppTheme.neonGreen.withOpacity(0.2) : Colors.orange.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  goalMet ? "✓ GOAL" : "${(((_currentSteps / 10000) * 100).toInt())}%",
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: goalMet ? AppTheme.neonGreen : Colors.orange,
+                  ),
+                ),
+              ),
             ],
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: goalMet
-                    ? [AppTheme.neonGreen.withOpacity(0.3), AppTheme.neonGreen.withOpacity(0.1)]
-                    : [Colors.white.withOpacity(0.1), Colors.white.withOpacity(0.05)],
-              ),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: goalMet ? AppTheme.neonGreen.withOpacity(0.5) : Colors.white.withOpacity(0.2),
-              ),
-            ),
-            child: Text(
-              goalMet
-                  ? "✓ GOAL"
-                  : "${(((_currentSteps / 10000) * 100).toInt())}%",
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: goalMet ? AppTheme.neonGreen : Colors.white70,
-              ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSyncButton() {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.neonGreen.withOpacity(0.3),
+            blurRadius: 16,
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: NeonBtn(
+        text: _syncSuccess ? "SYNCED" : "UPDATE MOOD",
+        color: _syncSuccess ? AppTheme.neonGreen : AppTheme.neonPurple,
+        isLoading: _isSyncing,
+        onTap: _syncToBrain,
+      ),
+    ).animate().fadeIn().scale();
+  }
+
+  Widget _buildSleepQualityBadge() {
+    // Sleep quality: < 6h = bad, 6-8h = good, > 8h = too much
+    String quality;
+    Color color;
+    String emoji;
+    
+    if (_sleepHours < 6) {
+      quality = "INSUFFICIENT";
+      color = AppTheme.neonPink;
+      emoji = "😴";
+    } else if (_sleepHours <= 8) {
+      quality = "OPTIMAL";
+      color = AppTheme.neonGreen;
+      emoji = "😴";
+    } else {
+      quality = "TOO MUCH";
+      color = Colors.orange;
+      emoji = "😴";
+    }
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.4), width: 1),
+      ),
+      child: Row(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 16)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("Sleep Quality", style: AppTheme.labelSmall.copyWith(fontSize: 10)),
+                Text(
+                  quality,
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
-    ).animate().fadeIn().slideY(begin: 0.2, end: 0);
+    );
   }
 
-  Widget _buildSyncButton() {
-    return NeonBtn(
-      text: _syncSuccess ? "SYNCED" : "UPDATE MOOD",
-      color: _syncSuccess ? AppTheme.neonGreen : AppTheme.neonPurple,
-      isLoading: _isSyncing,
-      onTap: _syncToBrain,
-    ).animate().fadeIn().scale();
+  Widget _buildDataConfidenceScore() {
+    // Calculate confidence based on how many fields are filled
+    int filledFields = 0;
+    int totalFields = 6; // energy, stress, social, steps, sleep, location
+    
+    if (_energyLevel > 0) filledFields++;
+    if (_stressLevel > 0) filledFields++;
+    if (_socialLevel > 0) filledFields++;
+    if (_currentSteps > 0) filledFields++;
+    if (_sleepHours > 0) filledFields++;
+    if (_cityName.isNotEmpty) filledFields++;
+    
+    double confidence = filledFields / totalFields;
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
+      ),
+      child: Row(
+        children: [
+          Text("📊", style: const TextStyle(fontSize: 16)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("Data Quality", style: AppTheme.labelSmall.copyWith(fontSize: 10)),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: confidence,
+                          minHeight: 4,
+                          backgroundColor: Colors.white.withOpacity(0.1),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            confidence > 0.7 ? AppTheme.neonGreen : AppTheme.neonPurple,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      "${(confidence * 100).toInt()}%",
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: confidence > 0.7 ? AppTheme.neonGreen : AppTheme.neonPurple,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLivePredictionPreview() {
+    // Analyzer-based prediction with ALL data sources
+    String predictedMood = _estimateMoodHeuristic();
+    Color moodColor = _getMoodColor(predictedMood);
+    
+    // Build dynamic sources list based on available data
+    final List<String> activeSources = [];
+    if (_sleepHours > 0) activeSources.add('Sleep');
+    if (_weatherEmoji.isNotEmpty || _backendWeatherSummary != null) activeSources.add('Weather');
+    if (_backendMusicMetrics != null) activeSources.add('Music');
+    if (_backendCalendarSummary != null && _backendCalendarSummary!.isNotEmpty) activeSources.add('Calendar');
+    activeSources.add('Time');
+    
+    final sourcesText = activeSources.join(' • ');
+    
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            moodColor.withOpacity(0.15),
+            moodColor.withOpacity(0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: moodColor.withOpacity(0.3), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text("LIVE PREDICTION", style: AppTheme.labelSmall.copyWith(fontSize: 10)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: moodColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  "ALGO",
+                  style: TextStyle(fontSize: 8, color: moodColor, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.psychology_outlined, color: moodColor, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      predictedMood.toUpperCase(),
+                      style: TextStyle(
+                        color: moodColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    Text(
+                      sourcesText,
+                      style: AppTheme.labelSmall.copyWith(fontSize: 9, color: Colors.white54),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _estimateMoodHeuristic() {
+    // Use backend MoodDataAnalyzer with ALL available data sources
+    try {
+      final analyzer = MoodDataAnalyzer();
+
+      // === CALENDAR: Parse backend summary into structured events ===
+      final List<Map<String, dynamic>> calendarEvents = [];
+      if (_backendCalendarSummary != null && _backendCalendarSummary!.isNotEmpty) {
+        // Parse calendar summary (format: "event1, event2, ...")
+        final eventLines = _backendCalendarSummary!.split('\n');
+        for (final line in eventLines) {
+          if (line.trim().isEmpty) continue;
+          
+          // Create event structure for analyzer
+          calendarEvents.add({
+            'summary': line.trim().toLowerCase(),
+            'start': {
+              'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
+            },
+          });
+        }
+        debugPrint("📅 Parsed ${calendarEvents.length} calendar events");
+      }
+
+      // === MUSIC: Use backend metrics (from YouTube Music API) ===
+      final valence = _backendMusicMetrics?['avg_valence']?.toDouble() ?? 0.5;
+      final energy = _backendMusicMetrics?['avg_energy']?.toDouble() ?? 0.5;
+      final tempo = _backendMusicMetrics?['avg_tempo']?.toInt() ?? 100;
+      final danceability = _backendMusicMetrics?['avg_danceability']?.toDouble() ?? 0.5;
+      debugPrint("🎵 Music: valence=$valence, energy=$energy, tempo=$tempo");
+
+      // === WEATHER: Build summary from LOCAL app data (real-time) ===
+      String weatherSummary = 'Unknown';
+      double? temperature;
+      
+      if (_weatherEmoji.isNotEmpty || _cityName.isNotEmpty) {
+        // Map weather emoji to backend-compatible keywords
+        if (_weatherEmoji.contains('☀') || _weatherEmoji.contains('🌞')) {
+          weatherSummary = 'Soleil';
+        } else if (_weatherEmoji.contains('🌧') || _weatherEmoji.contains('⛈')) {
+          weatherSummary = 'Pluie';
+        } else if (_weatherEmoji.contains('☁') || _weatherEmoji.contains('🌥')) {
+          weatherSummary = 'Nuageux';
+        } else if (_weatherEmoji.contains('❄') || _weatherEmoji.contains('🌨')) {
+          weatherSummary = 'Neige';
+        }
+        
+        // Add temperature if available
+        if (_temperature.isNotEmpty) {
+          try {
+            temperature = double.parse(_temperature.replaceAll('°C', '').trim());
+          } catch (_) {}
+        }
+        
+        debugPrint("🌤️ Weather: $weatherSummary (${_temperature})");
+      } else if (_backendWeatherSummary != null) {
+        // Fallback to backend data if local not available
+        weatherSummary = _backendWeatherSummary!;
+      }
+
+      // === TIME: Execution type based on current hour ===
+      final now = DateTime.now();
+      final hour = now.hour;
+      String executionType;
+      if (hour < 12) {
+        executionType = 'MATIN';
+      } else if (hour < 17) {
+        executionType = 'APRES-MIDI';
+      } else {
+        executionType = 'SOIREE';
+      }
+
+      // === RUN ANALYZER with ALL data sources ===
+      final result = analyzer.analyze(
+        calendarEvents: calendarEvents,
+        sleepHours: _sleepHours,
+        bedtime: '23:00', // Could be enhanced with actual tracking
+        wakeTime: '07:00',
+        weather: weatherSummary,
+        temperature: temperature,
+        valence: valence,
+        energy: energy,
+        tempo: tempo,
+        danceability: danceability,
+        currentTime: now,
+        executionType: executionType,
+      );
+
+      debugPrint("🧠 Analyzer result: ${result.topMood} (sleep=${_sleepHours}h, weather=$weatherSummary)");
+      return result.topMood;
+    } catch (e) {
+      debugPrint("⚠️ Analyzer failed: $e");
+      // Fallback to simple heuristic
+      if (_sleepHours < 6) return "tired";
+      if (_energyLevel > 0.7) return "energetic";
+      if (_stressLevel > 0.7) return "intense";
+      return "chill";
+    }
+  }
+
+  Color _getMoodColor(String mood) {
+    final m = mood.toLowerCase();
+    if (m.contains('happy') || m.contains('festif') || m.contains('energetic') || m.contains('pumped')) {
+      return AppTheme.neonGreen;
+    }
+    if (m.contains('sad') || m.contains('mélancolique') || m.contains('melancholy')) {
+      return Colors.blueGrey;
+    }
+    if (m.contains('calm') || m.contains('chill') || m.contains('creative')) {
+      return Colors.cyan;
+    }
+    if (m.contains('intense') || m.contains('agressif') || m.contains('stressed')) {
+      return AppTheme.neonPink;
+    }
+    if (m.contains('hard_work') || m.contains('confident')) {
+      return AppTheme.neonPurple;
+    }
+    if (m.contains('tired')) {
+      return Colors.orange;
+    }
+    return AppTheme.neonPurple;
   }
 }
 

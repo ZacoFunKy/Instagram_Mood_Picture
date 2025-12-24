@@ -13,6 +13,7 @@ class MoodEntry {
   // Rich metadata for detailed analysis
   final String? geminiPrompt;
   final String? algoPrediction;
+  final String? heuristicPrediction;
   final String? weatherSummary;
   final Map<String, dynamic>? feedbackMetrics;
   final Map<String, dynamic>? musicMetrics;
@@ -33,6 +34,7 @@ class MoodEntry {
     this.executionType,
     this.geminiPrompt,
     this.algoPrediction,
+    this.heuristicPrediction,
     this.weatherSummary,
     this.feedbackMetrics,
     this.musicMetrics,
@@ -63,6 +65,7 @@ class MoodEntry {
       // Rich metadata
       geminiPrompt: json['gemini_prompt'] as String?,
       algoPrediction: json['algo_prediction'] as String?,
+      heuristicPrediction: json['heuristic_prediction'] as String?,
       weatherSummary: json['weather_summary'] as String?,
       feedbackMetrics: json['feedback_metrics'] as Map<String, dynamic>?,
       musicMetrics: json['music_metrics'] as Map<String, dynamic>?,
@@ -113,6 +116,7 @@ class MoodEntry {
     String? executionType,
     String? geminiPrompt,
     String? algoPrediction,
+    String? heuristicPrediction,
     String? weatherSummary,
     Map<String, dynamic>? feedbackMetrics,
     Map<String, dynamic>? musicMetrics,
@@ -133,6 +137,7 @@ class MoodEntry {
       executionType: executionType ?? this.executionType,
       geminiPrompt: geminiPrompt ?? this.geminiPrompt,
       algoPrediction: algoPrediction ?? this.algoPrediction,
+      heuristicPrediction: heuristicPrediction ?? this.heuristicPrediction,
       weatherSummary: weatherSummary ?? this.weatherSummary,
       feedbackMetrics: feedbackMetrics ?? this.feedbackMetrics,
       musicMetrics: musicMetrics ?? this.musicMetrics,
