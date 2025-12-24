@@ -571,7 +571,7 @@ def main() -> None:
     mood = DEFAULT_FALLBACK_MOOD
     gemini_prompt = None
     algo_prediction = None
-
+    
     if args.no_ai:
         logger.info("Skipping AI prediction (--no-ai). Using default: 'energetic'")
     else:
@@ -591,13 +591,19 @@ def main() -> None:
                 steps_count=steps_count  # NEW: Pass step count
             )
 
-            if isinstance(result, dict) and args.dry_run:
+            if isinstance(result, dict):
                 mood = str(result.get("mood", DEFAULT_FALLBACK_MOOD))
                 gemini_prompt = result.get("prompt", "")
-                with open(DRY_RUN_PROMPT_FILE, "w", encoding="utf-8") as f:
-                    f.write(f"--- PROMPT GENERATED ON {now_dt} ---\n{gemini_prompt}")
-                logger.info(f"Dry run: Prompt saved to {DRY_RUN_PROMPT_FILE}")
+                algo_prediction = result.get("algo_prediction") # Extract Algo Prediction
+                
+                if args.dry_run:
+                    with open(DRY_RUN_PROMPT_FILE, "w", encoding="utf-8") as f:
+                        f.write(f"--- PROMPT GENERATED ON {now_dt} ---\n{gemini_prompt}")
+                    logger.info(f"Dry run: Prompt saved to {DRY_RUN_PROMPT_FILE}")
+                else:
+                    logger.info(f">>> PREDICTED MOOD: {mood} <<<")
             else:
+                # Fallback for legacy string return (should not happen with new gemini.py)
                 mood = str(result)
                 logger.info(f">>> PREDICTED MOOD: {mood} <<<")
 
@@ -628,14 +634,13 @@ def main() -> None:
     
     # Determine which location was actually used
     # Only use override_location if it's explicitly provided and not empty
-    # Avoid "Bordeaux (Default/History)" - leave as None/empty if missing
     final_location = override_location if (override_location and override_location.strip()) else None
     
     save_daily_log(
         weekday, mood, music_summary, calendar_summary, current_exec_type, args.dry_run,
         location=final_location,
         gemini_prompt=gemini_prompt,
-        algo_prediction=None,  # Will add this from analyzer
+        algo_prediction=algo_prediction,
         weather_summary=weather_summary,
         sleep_hours=sleep_info.get("sleep_hours") if sleep_info else None,
         feedback_metrics=feedback_metrics,

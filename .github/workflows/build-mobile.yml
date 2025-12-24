@@ -47,7 +47,7 @@ jobs:
 
       - name: Create .env config
         run: |
-          # Try to get MONGO_URI first, then MONGODB_URI
+          # MongoDB URIs
           URI="${{ secrets.MONGO_URI }}"
           if [ -z "$URI" ]; then
             URI="${{ secrets.MONGODB_URI }}"
@@ -60,7 +60,7 @@ jobs:
 
           echo "MONGO_URI=$URI" > .env
           
-          # Handle Mobile URI
+          # Mobile MongoDB URI
           URI_MOBILE="${{ secrets.MONGO_URI_MOBILE }}"
           if [ -z "$URI_MOBILE" ]; then
              echo "⚠️ WARNING: MONGO_URI_MOBILE not found. Sync might fail."
@@ -69,6 +69,46 @@ jobs:
           fi
           
           echo "COLLECTION_NAME=overrides" >> .env
+          
+          # Spotify credentials (for music enrichment)
+          SPOTIFY_CLIENT_ID="${{ secrets.SPOTIFY_CLIENT_ID }}"
+          SPOTIFY_CLIENT_SECRET="${{ secrets.SPOTIFY_CLIENT_SECRET }}"
+          
+          if [ -z "$SPOTIFY_CLIENT_ID" ] || [ -z "$SPOTIFY_CLIENT_SECRET" ]; then
+             echo "⚠️ WARNING: Spotify credentials not found. Music enrichment will fail."
+          else
+             echo "SPOTIFY_CLIENT_ID=$SPOTIFY_CLIENT_ID" >> .env
+             echo "SPOTIFY_CLIENT_SECRET=$SPOTIFY_CLIENT_SECRET" >> .env
+             echo "✅ Spotify credentials added"
+          fi
+          
+          # Google Service Account (for Calendar API)
+          GOOGLE_SERVICE_ACCOUNT="${{ secrets.GOOGLE_SERVICE_ACCOUNT }}"
+          if [ -z "$GOOGLE_SERVICE_ACCOUNT" ]; then
+             echo "⚠️ WARNING: GOOGLE_SERVICE_ACCOUNT not found. Calendar sync will fail."
+          else
+             echo "GOOGLE_SERVICE_ACCOUNT='$GOOGLE_SERVICE_ACCOUNT'" >> .env
+             echo "✅ Google Service Account added"
+          fi
+          
+          # Google Calendar ID
+          TARGET_CALENDAR_ID="${{ secrets.TARGET_CALENDAR_ID }}"
+          if [ -z "$TARGET_CALENDAR_ID" ]; then
+             echo "⚠️ WARNING: TARGET_CALENDAR_ID not found. Using 'primary' as default."
+             echo "TARGET_CALENDAR_ID=primary" >> .env
+          else
+             echo "TARGET_CALENDAR_ID=$TARGET_CALENDAR_ID" >> .env
+             echo "✅ Calendar ID added"
+          fi
+          
+          # Gemini API Key (for AI analysis)
+          GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}"
+          if [ -z "$GEMINI_API_KEY" ]; then
+             echo "⚠️ WARNING: GEMINI_API_KEY not found. AI features may be limited."
+          else
+             echo "GEMINI_API_KEY=$GEMINI_API_KEY" >> .env
+             echo "✅ Gemini API key added"
+          fi
           
           echo "✅ .env created in working directory (mobile/)"
           
@@ -79,8 +119,14 @@ jobs:
           fi
           
           echo "🔍 Verifying .env content (masked):"
-          cat .env | sed 's/mongodb+srv:\/\/[^@]*@/mongodb+srv:\/\/USER:PASS@/g'
-        # Note: MONGO_URI for history (daily_logs), MONGO_URI_MOBILE for overrides
+          cat .env | sed 's/mongodb+srv:\/\/[^@]*@/mongodb+srv:\/\/USER:PASS@/g' | sed 's/"private_key":.*/"private_key":"REDACTED"/g'
+          
+          echo ""
+          echo "📋 Services configured:"
+          grep -q "SPOTIFY_CLIENT_ID" .env && echo "  ✅ Spotify Enrichment" || echo "  ⚠️ Spotify (missing)"
+          grep -q "GOOGLE_SERVICE_ACCOUNT" .env && echo "  ✅ Google Calendar" || echo "  ⚠️ Google Calendar (missing)"
+          grep -q "GEMINI_API_KEY" .env && echo "  ✅ Gemini AI" || echo "  ⚠️ Gemini (missing)"
+        # Note: All services use same credentials as backend for consistency
 
       - name: Setup Android Local Properties
         run: |

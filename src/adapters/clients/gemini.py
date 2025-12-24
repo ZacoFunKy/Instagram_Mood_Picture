@@ -597,7 +597,7 @@ def predict_mood(
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         logger.error("No GEMINI_API_KEY found in environment.")
-        return "chill"
+        return {"mood": "chill", "algo_prediction": preprocessor_analysis.get('summary') if preprocessor_analysis else None, "prompt": prompt}
 
     client = genai.Client(api_key=api_key)
 
@@ -612,7 +612,11 @@ def predict_mood(
             
             if mood:
                 logger.info(f"Model {model_name} predicted: {mood}")
-                return mood
+                return {
+                    "mood": mood,
+                    "algo_prediction": preprocessor_analysis.get('summary') if preprocessor_analysis else None,
+                    "prompt": prompt
+                }
             else:
                 logger.warning(f"Model {model_name} returned invalid mood format: {response.text}")
                 
@@ -621,4 +625,4 @@ def predict_mood(
             continue
 
     logger.error("All models failed. Fallback to default.")
-    return "chill"
+    return {"mood": "chill", "algo_prediction": preprocessor_analysis.get('summary') if preprocessor_analysis else None, "prompt": prompt}

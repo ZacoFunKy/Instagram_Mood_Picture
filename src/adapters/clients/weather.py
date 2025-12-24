@@ -311,7 +311,7 @@ class WeatherAPIClient:
 # PUBLIC API
 # ============================================================================
 
-def get_bordeaux_weather(manual_city: Optional[str] = None) -> str:
+def get_local_weather(manual_city: Optional[str] = None) -> str:
     """
     Fetches daily weather forecast (auto-location or Bordeaux).
     Returns: Human-readable weather summary string.
@@ -329,11 +329,11 @@ def get_bordeaux_weather(manual_city: Optional[str] = None) -> str:
         return str(weather)
 
     except Exception as e:
-        logger.error(f"Critical error in get_bordeaux_weather: {e}")
+        logger.error(f"Critical error in get_local_weather: {e}")
         return "Weather unavailable (Error)."
 
 
-def get_bordeaux_weather_detailed(manual_city: Optional[str] = None) -> Optional[Tuple[str, Dict[str, Any]]]:
+def get_local_weather_detailed(manual_city: Optional[str] = None) -> Optional[Tuple[str, Dict[str, Any]]]:
     """
     Fetches detailed weather forecast with metadata.
     Returns: Tuple of (summary_string, metadata_dict) or None.
@@ -349,5 +349,5 @@ def get_bordeaux_weather_detailed(manual_city: Optional[str] = None) -> Optional
         return weather.to_tuple()
 
     except Exception as e:
-        logger.error(f"Error in get_bordeaux_weather_detailed: {e}")
+        logger.error(f"Error in get_local_weather_detailed: {e}")
         return None

@@ -25,6 +25,19 @@ dependencies:
   geolocator: ^11.0.0
   geocoding: ^2.1.0
   workmanager: ^0.9.0
+  
+  # Google Calendar API for direct event access
+  googleapis: ^13.1.0
+  googleapis_auth: ^1.6.0
+  
+  # Sleep tracking sensors
+  sensors_plus: ^5.0.1
+  screen_state: ^2.0.0
+  android_alarm_manager_plus: ^4.0.0
+  
+  # Media session for YouTube Music currently playing
+  audio_service: ^0.18.12
+  audio_session: ^0.1.18
 
 
 dev_dependencies:
