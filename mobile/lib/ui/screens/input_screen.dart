@@ -363,7 +363,6 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-      children: [
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -371,13 +370,13 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
                 style: AppTheme.headerLarge.copyWith(fontSize: 28)),
             Row(
               children: [
-                 Icon(Icons.location_on, size: 14, color: Colors.white54),
-                 const SizedBox(width: 4),
-                 Text(_cityName.toUpperCase(), // Display City
+                Icon(Icons.location_on, size: 14, color: Colors.white54),
+                const SizedBox(width: 4),
+                Text(_cityName.toUpperCase(), // Display City
                     style: AppTheme.subText.copyWith(color: AppTheme.neonCyan)),
               ],
             ),
-             const SizedBox(height: 4),
+            const SizedBox(height: 4),
             Text(DateFormat('EEEE, d MMM').format(DateTime.now()).toUpperCase(),
                 style: AppTheme.subText),
           ],
@@ -406,20 +405,28 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-      children: [
         _buildStatusChip(Icons.calendar_today, "Events", _isCalendarConnected),
         _buildStatusChip(Icons.music_note, "Music", _isMusicConnected),
         GestureDetector(
-             onTap: () {
-                 showDialog(context: context, builder: (ctx) => AlertDialog(
-                     backgroundColor: Colors.black,
-                     title: const Text("Pedometer Stats", style: TextStyle(color: Colors.white)),
-                     content: Text("Steps today: $_currentSteps", style: const TextStyle(color: AppTheme.neonGreen, fontSize: 24)),
-                     actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK"))],
-                 ));
-             },
-             child: _buildStatusChip(Icons.directions_walk, "Steps", _isPedometerActive)
-        ),
+            onTap: () {
+              showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                        backgroundColor: Colors.black,
+                        title: const Text("Pedometer Stats",
+                            style: TextStyle(color: Colors.white)),
+                        content: Text("Steps today: $_currentSteps",
+                            style: const TextStyle(
+                                color: AppTheme.neonGreen, fontSize: 24)),
+                        actions: [
+                          TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text("OK"))
+                        ],
+                      ));
+            },
+            child: _buildStatusChip(
+                Icons.directions_walk, "Steps", _isPedometerActive)),
       ],
     );
   }
@@ -490,7 +497,8 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               decoration: BoxDecoration(
-                  border: Border.all(color: AppTheme.neonPurple.withOpacity(0.5)),
+                  border:
+                      Border.all(color: AppTheme.neonPurple.withOpacity(0.5)),
                   color: AppTheme.neonPurple.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(16)),
               child: Row(
@@ -498,13 +506,14 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
                 children: [
-                  Text("${_sleepDuration.hour}h ${_sleepDuration.minute.toString().padLeft(2, '0')}m",
+                  Text(
+                      "${_sleepDuration.hour}h ${_sleepDuration.minute.toString().padLeft(2, '0')}m",
                       style: GoogleFonts.spaceMono(
                           fontSize: 32,
                           fontWeight: FontWeight.bold,
                           color: Colors.white)),
-                   const SizedBox(width: 8),
-                   Icon(Icons.edit, size: 16, color: Colors.white54)
+                  const SizedBox(width: 8),
+                  Icon(Icons.edit, size: 16, color: Colors.white54)
                 ],
               ),
             ),
@@ -515,32 +524,32 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _pickSleepTime() async {
-       final TimeOfDay? picked = await showTimePicker(
-        context: context,
-        initialTime: _sleepDuration,
-        builder: (BuildContext context, Widget? child) {
-          return Theme(
-            data: ThemeData.dark().copyWith(
-              colorScheme: const ColorScheme.dark(
-                primary: AppTheme.neonPurple,
-                onPrimary: Colors.white,
-                surface: Color(0xFF1E1E1E),
-                onSurface: Colors.white,
-              ),
-              dialogBackgroundColor: Colors.black,
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: _sleepDuration,
+      builder: (BuildContext context, Widget? child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: AppTheme.neonPurple,
+              onPrimary: Colors.white,
+              surface: Color(0xFF1E1E1E),
+              onSurface: Colors.white,
             ),
-            child: child!,
-          );
-        },
-      );
-      
-      if (picked != null && picked != _sleepDuration) {
-          setState(() {
-              _sleepDuration = picked;
-              _sleepIsAutoDetected = false;
-          });
-          _onInputChanged();
-      }
+            dialogBackgroundColor: Colors.black,
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null && picked != _sleepDuration) {
+      setState(() {
+        _sleepDuration = picked;
+        _sleepIsAutoDetected = false;
+      });
+      _onInputChanged();
+    }
   }
 
   // === METRICS SECTION ===

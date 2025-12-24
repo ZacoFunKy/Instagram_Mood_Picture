@@ -199,6 +199,213 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 }
 
+class HistoryCard extends StatelessWidget {
+  final MoodEntry entry;
+  final int index;
+  final VoidCallback onTap;
+
+  const HistoryCard({
+    super.key,
+    required this.entry,
+    required this.index,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Date Formatting
+    final date = DateTime.parse(entry.date);
+    final dayNum = DateFormat('d').format(date);
+    final monthStr = DateFormat('MMM').format(date).toUpperCase();
+    final dayName = DateFormat('EEEE').format(date).toUpperCase();
+    final timeOfDay = _HistoryScreenState._formatTimeOfDayStatic(
+        entry.executionType, entry.lastUpdated, entry.date);
+
+    Color moodColor =
+        _HistoryScreenState._getMoodColorStatic(entry.moodSelected);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 20),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withOpacity(0.08),
+              Colors.white.withOpacity(0.03),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withOpacity(0.15), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: moodColor.withOpacity(0.1),
+              blurRadius: 20,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Left: Date Block
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: moodColor.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: moodColor.withOpacity(0.3)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(dayNum,
+                      style: AppTheme.headerLarge.copyWith(
+                          fontSize: 28, height: 1.0, color: moodColor)),
+                  Text(monthStr,
+                      style: AppTheme.subText.copyWith(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: moodColor.withOpacity(0.8))),
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+
+            // Middle: Context + Mood
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                            timeOfDay != null
+                                ? "$dayName • $timeOfDay"
+                                : dayName,
+                            style: AppTheme.subText.copyWith(
+                                fontSize: 11,
+                                letterSpacing: 0.5,
+                                color: Colors.white70)),
+                      ),
+                      // Assume synced for now as we pull from DB
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppTheme.neonGreen.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.cloud_done,
+                                color: AppTheme.neonGreen, size: 12),
+                            const SizedBox(width: 4),
+                            Text("SYNC",
+                                style: TextStyle(
+                                    color: AppTheme.neonGreen,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      )
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (entry.moodSelected != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: moodColor.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: moodColor.withOpacity(0.4)),
+                      ),
+                      child: Text(
+                        entry.moodSelected!.toUpperCase(),
+                        style: TextStyle(
+                            color: moodColor,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
+                            letterSpacing: 0.8),
+                      ),
+                    )
+                  else
+                    Text("PROCESSING...",
+                        style: AppTheme.subText.copyWith(fontSize: 14)),
+                  const SizedBox(height: 12),
+                  // Metrics in Row
+                  Row(
+                    children: [
+                      if (entry.sleepHours > 0) ...[
+                        _HistoryCardMiniMetric(
+                            Icons.bedtime, "${entry.sleepHours}h"),
+                        const SizedBox(width: 12),
+                      ],
+                      if (entry.steps > 0)
+                        _HistoryCardMiniMetric(Icons.directions_walk,
+                            "${(entry.steps / 1000).toStringAsFixed(1)}k"),
+                      if (entry.location != null &&
+                          entry.location!.isNotEmpty) ...[
+                        const SizedBox(width: 12),
+                        _HistoryCardMiniMetric(
+                            Icons.location_on, entry.location!),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "TAP FOR DETAILS",
+                    style: AppTheme.labelSmall.copyWith(
+                      fontSize: 9,
+                      color: Colors.white30,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ).animate().fadeIn(delay: (50 * index).ms).slideY(begin: 0.3, end: 0);
+  }
+}
+
+class _HistoryCardMiniMetric extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  const _HistoryCardMiniMetric(this.icon, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white70, size: 14),
+          const SizedBox(width: 4),
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
+
 /// Detail Modal for showing comprehensive mood data
 class _DetailModal extends StatelessWidget {
   final MoodEntry entry;
@@ -207,7 +414,8 @@ class _DetailModal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final moodColor = _getMoodColorStatic(entry.moodSelected);
+    final moodColor =
+        _HistoryScreenState._getMoodColorStatic(entry.moodSelected);
 
     return Container(
       decoration: BoxDecoration(
@@ -260,7 +468,7 @@ class _DetailModal extends StatelessWidget {
                   // Date & Time
                   _buildDetailSection(
                     "DATE & TIME",
-                    "${entry.date} • ${_formatTimeOfDayStatic(entry.executionType, entry.lastUpdated, entry.date)}",
+                    "${entry.date} • ${_HistoryScreenState._formatTimeOfDayStatic(entry.executionType, entry.lastUpdated, entry.date)}",
                   ),
                   const SizedBox(height: 24),
 
@@ -537,60 +745,5 @@ class _DetailModal extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  static Color _getMoodColorStatic(String? mood) {
-    if (mood == null) return Colors.white;
-    final m = mood.toLowerCase();
-    if (m.contains('happy') ||
-        m.contains('festif') ||
-        m.contains('energetic') ||
-        m.contains('pumped')) {
-      return AppTheme.neonGreen;
-    }
-    if (m.contains('sad') ||
-        m.contains('mélancolique') ||
-        m.contains('melancholy')) {
-      return Colors.blueGrey;
-    }
-    if (m.contains('calm') || m.contains('chill') || m.contains('creative')) {
-      return Colors.cyan;
-    }
-    if (m.contains('explosif') ||
-        m.contains('agressif') ||
-        m.contains('intense')) {
-      return AppTheme.neonPink;
-    }
-    if (m.contains('hard_work') || m.contains('confident')) {
-      return AppTheme.neonPurple;
-    }
-    if (m.contains('tired')) {
-      return Colors.orange;
-    }
-    return AppTheme.neonPurple;
-  }
-
-  static String? _formatTimeOfDayStatic(
-      String? executionType, DateTime? date, String? dateStr) {
-    if (executionType != null && executionType.isNotEmpty) {
-      final execType = executionType.toUpperCase();
-      if (execType.contains('MATIN')) return "MATIN";
-      if (execType.contains('APRES') || execType.contains('MIDI'))
-        return "APRÈS-MIDI";
-      if (execType.contains('SOIREE') || execType.contains('SOIR'))
-        return "SOIR";
-      if (execType.contains('NUIT')) return "NUIT";
-    }
-
-    if (date != null) {
-      date = date.toLocal();
-      int hour = date.hour;
-      if (hour < 5) return "NUIT";
-      if (hour < 12) return "MATIN";
-      if (hour < 18) return "APRÈS-MIDI";
-      if (hour < 24) return "SOIR";
-    }
-
-    return "SOIR";
   }
 }
