@@ -15,7 +15,11 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../models/mood_entry.dart';
 import '../../services/database_service.dart';
 import '../../services/pedometer_service.dart';
-import '../../services/youtube_music_service.dart';
+import '../services/google_calendar_service.dart';
+import '../services/ics_service.dart';
+import '../services/youtube_music_service.dart';
+import '../services/youtube_music_cloud_service.dart';
+import '../utils/app_logger.dart';
 import '../../services/spotify_enrichment_service.dart';
 import '../../services/google_calendar_service.dart';
 import '../../services/sleep_tracking_service.dart';
@@ -118,36 +122,56 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         final isSignedIn = await _calendarService.signInSilently();
         if (mounted) setState(() => _isCalendarConnected = isSignedIn);
 
+        // Fetch Google Events
+        List<Map<String, dynamic>> googleEvents = [];
         if (isSignedIn) {
-          final events = await _calendarService.getTodayEvents();
-          if (mounted) {
-            setState(() {
-              _todayEvents = events;
-            });
-          }
+          googleEvents = await _calendarService.getTodayEvents();
+        }
+
+        // Fetch ICS Events (Always try, doesn't need Google Sign-In)
+        final icsEvents = await IcsService().getTodayEvents();
+
+        final allEvents = [...googleEvents, ...icsEvents];
+        // Sort by time
+        allEvents.sort((a, b) {
+          final tA = a['start']['dateTime'] ?? '';
+          final tB = b['start']['dateTime'] ?? '';
+          return tA.compareTo(tB);
+        });
+
+        if (mounted) {
+          setState(() {
+            _todayEvents = allEvents;
+            // If we have ICS events, we are "Connected" in terms of data availability
+            if (icsEvents.isNotEmpty) {
+              _isCalendarConnected = true;
+            }
+          });
         }
       } catch (e) {
         debugPrint("Calendar init error: $e");
       }
 
       // 4. Music - Listen & Enrich
-      _checkMusicConnection(); // Check initial state
+      _checkMusicConnection();
 
-      // Load any existing history first
-      _processMusicHistory(_musicService.getRecentTracks());
+      // Load Local + Cloud History
+      final localTracks = await _musicService.getRecentTracks();
+      _processMusicHistory(localTracks);
 
-      // Check Permission for Music Listener
-      final prefs = await SharedPreferences.getInstance();
-      final bool suppressed =
-          prefs.getBool('music_permission_suppressed') ?? false;
+      // Async fetch cloud history (don't await to block UI)
+      YoutubeMusicCloudService().getRecentTracks().then((cloudTracks) {
+        if (cloudTracks.isNotEmpty && mounted) {
+          _processMusicHistory(cloudTracks);
+          // If we got cloud tracks, we are definitely "Connected"
+          setState(() => _isMusicConnected = true);
+        }
+      });
 
-      final musicPermGranted =
-          await _musicService.isNotificationPermissionGranted();
-
-      if (!musicPermGranted && !suppressed && mounted) {
-        // Delay slightly to let UI settle, then show dialog
-        Future.delayed(const Duration(seconds: 1), _showMusicPermissionDialog);
-      }
+      // Check Permission for Music Listener (Silent check only)
+      await _musicService.isNotificationPermissionGranted();
+      // Dialog removed per user request ("delete the music sync pop up")
+      // User must tap the "MUSIC" chip manually to enable it.
 
       _musicService.trackStream.listen((track) async {
         if (track != null) {
@@ -643,23 +667,30 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("DAILY DATA",
-                style: AppTheme.headerLarge.copyWith(fontSize: 28)),
-            Row(
-              children: [
-                Icon(Icons.location_on, size: 14, color: Colors.white54),
-                const SizedBox(width: 4),
-                Text(_cityName.toUpperCase(), // Display City
-                    style: AppTheme.subText.copyWith(color: AppTheme.neonCyan)),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(DateFormat('EEEE, d MMM').format(DateTime.now()).toUpperCase(),
-                style: AppTheme.subText),
-          ],
+        GestureDetector(
+          onLongPress: _showDebugLogs, // Secret Debug Menu
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("DAILY DATA",
+                  style: AppTheme.headerLarge.copyWith(fontSize: 28)),
+              Row(
+                children: [
+                  Icon(Icons.location_on, size: 14, color: Colors.white54),
+                  const SizedBox(width: 4),
+                  Text(_cityName.toUpperCase(), // Display City
+                      style:
+                          AppTheme.subText.copyWith(color: AppTheme.neonCyan)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                  DateFormat('EEEE, d MMM')
+                      .format(DateTime.now())
+                      .toUpperCase(),
+                  style: AppTheme.subText),
+            ],
+          ),
         ),
         if (_weatherEmoji.isNotEmpty)
           Container(
@@ -678,6 +709,50 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
             ),
           )
       ],
+    );
+  }
+
+  void _showDebugLogs() {
+    final logs = AppLogger().logs;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.black.withOpacity(0.9),
+        title: Text("Debug Logs", style: TextStyle(color: AppTheme.neonGreen)),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: ListView.builder(
+            itemCount: logs.length,
+            itemBuilder: (context, index) {
+              final log = logs[index];
+              final isError = log.contains("ERROR") || log.contains("🔴");
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2.0),
+                child: Text(log,
+                    style: TextStyle(
+                        color: isError ? Colors.redAccent : Colors.white70,
+                        fontSize: 10,
+                        fontFamily: 'monospace')),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              AppLogger().clear();
+              Navigator.pop(context);
+              _showDebugLogs();
+            }, // Clear and reopen to refresh? Or just clear.
+            child: Text("Clear", style: TextStyle(color: Colors.orange)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("Close", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
     );
   }
 

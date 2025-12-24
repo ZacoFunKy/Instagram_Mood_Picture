@@ -22,6 +22,7 @@ dependencies:
   shared_preferences: ^2.2.2
   flutter_animate: ^4.5.2
   http: ^1.2.1
+  icalendar_parser: ^2.0.0
   geolocator: ^11.0.0
   geocoding: ^3.0.0
   workmanager: ^0.9.0
@@ -57,3 +58,4 @@ flutter:
   uses-material-design: true
   assets:
     - .env
+    - assets/browser_auth.json

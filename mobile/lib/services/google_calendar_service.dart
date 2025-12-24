@@ -2,6 +2,7 @@ import 'package:googleapis/calendar/v3.dart' as cal;
 import 'package:googleapis_auth/auth_io.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// Service for direct Google Calendar API access
 /// Replaces backend calendar fetching with real-time event access
@@ -73,13 +74,55 @@ class GoogleCalendarService {
       final startOfDay = DateTime(now.year, now.month, now.day);
       final endOfDay = startOfDay.add(const Duration(days: 1));
 
-      final events = await _calendarApi!.events.list(
-        'primary',
-        timeMin: startOfDay.toUtc(),
-        timeMax: endOfDay.toUtc(),
-        singleEvents: true,
-        orderBy: 'startTime',
-      );
+      // Backend Parity: Support 'TARGET_CALENDAR_ID' from .env
+      final targetIds = dotenv.env['TARGET_CALENDAR_ID'];
+      List<String> calendarsToFetch = [];
+
+      if (targetIds != null && targetIds.isNotEmpty) {
+        calendarsToFetch = targetIds.split(',').map((e) => e.trim()).toList();
+      } else {
+        calendarsToFetch = ['primary'];
+      }
+
+      List<Map<String, dynamic>> allEvents = [];
+
+      for (final calId in calendarsToFetch) {
+        try {
+          final events = await _calendarApi!.events.list(
+            calId,
+            timeMin: startOfDay.toUtc(),
+            timeMax: endOfDay.toUtc(),
+            singleEvents: true,
+            orderBy: 'startTime',
+          );
+
+          if (events.items != null) {
+            final mapped = events.items!.map((event) {
+              final start = event.start?.dateTime ?? event.start?.date;
+              return {
+                'summary': event.summary ?? 'No title',
+                'start': {
+                  'dateTime': start?.toIso8601String() ??
+                      DateTime.now().toIso8601String(),
+                },
+                'description': event.description ?? '',
+                'location': event.location ?? '',
+                'source': calId == 'primary' ? 'Google' : 'Shared',
+              };
+            }).toList();
+            allEvents.addAll(mapped);
+          }
+        } catch (e) {
+          print("⚠️ Failed to fetch calendar $calId: $e");
+        }
+      }
+
+      if (allEvents.isEmpty) {
+        print('📅 No events today');
+      } else {
+        print('✅ Loaded ${allEvents.length} events from Google Calendar(s)');
+      }
+      return allEvents;
 
       if (events.items == null || events.items!.isEmpty) {
         print('📅 No events today');
