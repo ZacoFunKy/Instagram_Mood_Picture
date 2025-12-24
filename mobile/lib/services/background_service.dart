@@ -19,6 +19,13 @@ void callbackDispatcher() {
     debugPrint("🏗️ Background Task Started: $task");
 
     if (task == taskName) {
+      // 0. Night Time restriction (Save Battery/Data)
+      final hour = DateTime.now().hour;
+      if (hour >= 22 || hour < 7) {
+        debugPrint("🌙 Skipping Background Sync (Night Time: $hour:00)");
+        return Future.value(true);
+      }
+
       int retryCount = 0;
       const maxRetries = 2;
 
@@ -32,7 +39,8 @@ void callbackDispatcher() {
             await DatabaseService.instance.database
                 .timeout(const Duration(seconds: 30));
           } catch (e) {
-            debugPrint("⚠️ DB Connection Failed (Retry $retryCount/$maxRetries): $e");
+            debugPrint(
+                "⚠️ DB Connection Failed (Retry $retryCount/$maxRetries): $e");
             if (retryCount < maxRetries - 1) {
               await Future.delayed(const Duration(seconds: 5));
               retryCount++;
@@ -67,7 +75,8 @@ void callbackDispatcher() {
               debugPrint("⚠️ Background Location Permission Missing");
             }
           } catch (locError) {
-            debugPrint("⚠️ Background Location Error (Non-blocking): $locError");
+            debugPrint(
+                "⚠️ Background Location Error (Non-blocking): $locError");
             // Don't retry, location is optional
           }
 
@@ -77,7 +86,8 @@ void callbackDispatcher() {
           debugPrint("✅ Background Task Completed Successfully");
           return Future.value(true);
         } catch (e) {
-          debugPrint("❌ Background Task Error (Retry $retryCount/$maxRetries): $e");
+          debugPrint(
+              "❌ Background Task Error (Retry $retryCount/$maxRetries): $e");
           if (retryCount < maxRetries - 1) {
             retryCount++;
             await Future.delayed(const Duration(seconds: 5));
@@ -109,7 +119,7 @@ Future<void> _performBackgroundSync(int steps, String? location) async {
     var modifier = mongo.modify
         .set('steps_count', steps)
         .set('last_updated', now)
-        .set('last_auto_sync', now)  // Track when the auto-sync happened
+        .set('last_auto_sync', now) // Track when the auto-sync happened
         .set('device', 'android_bg_sync');
 
     if (location != null) {
@@ -117,10 +127,10 @@ Future<void> _performBackgroundSync(int steps, String? location) async {
     }
 
     await collection.update(mongo.where.eq('date', dateStr), modifier);
-    
+
     // Update cache: Track last automatic sync timestamp
     await prefs.setString('last_auto_sync_timestamp', now);
-    
+
     debugPrint("✅ Background Sync Complete (Update): $steps steps at $now");
   } else {
     // Si aucune entrée n'existe, créer une nouvelle entrée SANS valeurs par défaut
@@ -129,7 +139,7 @@ Future<void> _performBackgroundSync(int steps, String? location) async {
       'date': dateStr,
       'steps_count': steps,
       'last_updated': now,
-      'last_auto_sync': now,  // Track when the auto-sync happened
+      'last_auto_sync': now, // Track when the auto-sync happened
       'device': 'android_bg_sync',
     };
 
@@ -138,10 +148,10 @@ Future<void> _performBackgroundSync(int steps, String? location) async {
     }
 
     await collection.insert(newDoc);
-    
+
     // Update cache: Track last automatic sync timestamp
     await prefs.setString('last_auto_sync_timestamp', now);
-    
+
     debugPrint("✅ Background Sync Complete (Insert): $steps steps at $now");
   }
 }

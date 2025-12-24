@@ -115,7 +115,7 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
       // 3. Calendar
       try {
         // Try sign in silently first to check connection
-        final isSignedIn = await _calendarService.signIn(); // Or specific check
+        final isSignedIn = await _calendarService.signInSilently();
         if (mounted) setState(() => _isCalendarConnected = isSignedIn);
 
         if (isSignedIn) {
@@ -227,6 +227,15 @@ class _InputScreenState extends State<InputScreen> with WidgetsBindingObserver {
         }
       }
     } catch (_) {}
+  }
+
+  Future<void> _checkMusicConnection() async {
+    final isPlaying = await _musicService.isPlaying();
+    if (mounted) {
+      setState(() {
+        _isMusicConnected = isPlaying || _recentEnrichedTracks.isNotEmpty;
+      });
+    }
   }
 
   // === MUSIC ENRICHMENT HELPER ===

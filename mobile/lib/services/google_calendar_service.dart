@@ -6,7 +6,8 @@ import 'package:http/http.dart' as http;
 /// Service for direct Google Calendar API access
 /// Replaces backend calendar fetching with real-time event access
 class GoogleCalendarService {
-  static final GoogleCalendarService _instance = GoogleCalendarService._internal();
+  static final GoogleCalendarService _instance =
+      GoogleCalendarService._internal();
   factory GoogleCalendarService() => _instance;
   GoogleCalendarService._internal();
 
@@ -17,23 +18,42 @@ class GoogleCalendarService {
   GoogleSignInAccount? _currentUser;
   cal.CalendarApi? _calendarApi;
 
-  /// Initialize and sign in
+  /// Initialize and sign in silently (for app startup)
+  Future<bool> signInSilently() async {
+    try {
+      _currentUser = await _googleSignIn.signInSilently();
+      if (_currentUser == null) {
+        // Not signed in previously
+        return false;
+      }
+      return await _authenticate();
+    } catch (e) {
+      print('⚠️ Google Calendar silent sign-in error: $e');
+      return false;
+    }
+  }
+
+  /// Interactive Sign In (User clicks button)
   Future<bool> signIn() async {
     try {
       _currentUser = await _googleSignIn.signIn();
-      if (_currentUser == null) {
-        print('⚠️ Google Calendar sign-in cancelled');
-        return false;
-      }
+      if (_currentUser == null) return false;
+      return await _authenticate();
+    } catch (e) {
+      print('⚠️ Google Calendar sign-in error: $e');
+      return false;
+    }
+  }
 
+  Future<bool> _authenticate() async {
+    try {
       final authHeaders = await _currentUser!.authHeaders;
       final authenticateClient = GoogleAuthClient(authHeaders);
       _calendarApi = cal.CalendarApi(authenticateClient);
-
       print('✅ Google Calendar connected for ${_currentUser!.email}');
       return true;
     } catch (e) {
-      print('⚠️ Google Calendar sign-in error: $e');
+      print('⚠️ Auth headers error: $e');
       return false;
     }
   }
@@ -71,7 +91,8 @@ class GoogleCalendarService {
         return {
           'summary': event.summary ?? 'No title',
           'start': {
-            'dateTime': start?.toIso8601String() ?? DateTime.now().toIso8601String(),
+            'dateTime':
+                start?.toIso8601String() ?? DateTime.now().toIso8601String(),
           },
           'description': event.description ?? '',
           'location': event.location ?? '',
