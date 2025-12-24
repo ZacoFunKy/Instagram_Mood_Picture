@@ -165,7 +165,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
         ],
       ),
-      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
