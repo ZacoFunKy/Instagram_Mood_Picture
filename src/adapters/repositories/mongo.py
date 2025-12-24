@@ -294,10 +294,17 @@ class DailyLogManager:
                         serverSelectionTimeoutMS=CONNECTION_TIMEOUT_MS,
                         connectTimeoutMS=CONNECTION_TIMEOUT_MS
                     )
-                    mobile_db = mobile_client.get_default_database()
+                    try:
+                        mobile_db = mobile_client.get_default_database()
+                    except Exception:
+                         # Fallback if URI doesn't specify DB
+                        logger.warning("Mobile URI retrieved no default DB, using 'profile_predictor'")
+                        mobile_db = mobile_client[DATABASE_NAME]
+                        
                     collection = mobile_db['overrides']
                 except Exception as mobile_error:
                     logger.warning(f"Failed to connect to MONGO_URI_MOBILE, using fallback: {mobile_error}")
+                    # Fallback to current DB connection if mobile specific fails
                     collection = db['overrides']
             else:
                 # Fallback to main database
@@ -307,7 +314,9 @@ class DailyLogManager:
             if override:
                 logger.info(f"[OK] Found manual override for {date_str}: {override}")
                 return override
-            return {}
+            else:
+                logger.info(f"[INFO] No override found for {date_str} in collection '{collection.name}'")
+                return {}
         except Exception as e:
             logger.warning(f"Failed to fetch overrides: {e}")
             return {}

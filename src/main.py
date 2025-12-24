@@ -193,20 +193,42 @@ def save_daily_log(
 
         # If no location provided, try to get the last known location from overrides
         final_location = location
+        
+        # LOGIC: If missing location OR missing sleep, try to fetch from overrides as backup
         if not final_location:
             try:
-                # Try to get the last location from the mobile overrides collection
                 overrides_collection = db.get_collection('overrides')
-                # Find the most recent entry with a location
-                recent_override = overrides_collection.find_one(
-                    {"location": {"$exists": True, "$ne": None}},
-                    sort=[("last_updated", -1)]
-                )
-                if recent_override and recent_override.get("location"):
-                    final_location = recent_override.get("location")
-                    logger.info(f"[OK] Retrieved last known location from overrides: {final_location}")
+                
+                # 1. First try to find location in TODAY's override (most relevant)
+                today_manual = overrides_collection.find_one({"date": entry["date"]})
+                if today_manual and today_manual.get("location"):
+                     final_location = today_manual.get("location")
+                     logger.info(f"[OK] Found location in today's override: {final_location}")
+                
+                # 2. If not, find the most recent entry with a location
+                if not final_location:
+                    recent_override = overrides_collection.find_one(
+                        {"location": {"$exists": True, "$ne": None}},
+                        sort=[("_id", -1)] # Use _id for natural recency if last_updated missing
+                    )
+                    if recent_override and recent_override.get("location"):
+                        final_location = recent_override.get("location")
+                        logger.info(f"[OK] Retrieved last known location from history: {final_location}")
             except Exception as loc_error:
                 logger.warning(f"Could not retrieve location from overrides: {loc_error}")
+
+        # LOGIC: Validating Sleep Hours (Priority: Argument > Override > 0)
+        final_sleep = sleep_hours
+        if final_sleep is None or final_sleep == 0:
+             # Try to recover sleep from today's override if we missed it
+             try:
+                 overrides_collection = db.get_collection('overrides')
+                 today_manual = overrides_collection.find_one({"date": entry["date"]})
+                 if today_manual and today_manual.get("sleep_hours"):
+                     final_sleep = float(today_manual.get("sleep_hours"))
+                     logger.info(f"[OK] Recovered sleep hours from override in save: {final_sleep}")
+             except Exception:
+                 pass
 
         entry = {
             "date": datetime.datetime.now().strftime("%Y-%m-%d"),
@@ -221,7 +243,7 @@ def save_daily_log(
             "gemini_prompt": gemini_prompt,  # Full prompt sent to AI
             "algo_prediction": algo_prediction,  # Pre-processor result
             "weather_summary": weather_summary,  # Weather data
-            "sleep_hours": sleep_hours,  # Sleep used in analysis
+            "sleep_hours": final_sleep,  # Sleep used in analysis
             "feedback_metrics": feedback_metrics,  # User input (energy, stress, social)
             "steps_count": steps_count,  # Activity count
             "music_metrics": music_metrics,  # Spotify metrics (valence, energy, tempo)
